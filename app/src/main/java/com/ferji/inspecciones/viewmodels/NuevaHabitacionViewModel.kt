@@ -1,28 +1,36 @@
 package com.ferji.inspecciones.viewmodels
 
+import android.app.Application
+import android.net.Uri
 import android.util.Log
+import androidx.compose.foundation.layout.size
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ferji.inspecciones.data.model.HabitacionEntity
 import com.ferji.inspecciones.data.repository.HabitacionRepository
+import com.ferji.inspecciones.data.repository.InspeccionRepository
 import com.ferji.inspecciones.utils.GsonUtils
+import com.ferji.inspecciones.utils.PdfGenerator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+
 @HiltViewModel
 class NuevaHabitacionViewModel @Inject constructor(
     private val habitacionRepository: HabitacionRepository,
-    // ✅ No es necesario inspeccionRepository si no se usa
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "DEBUG_HABITACION"
+        private const val TAG_PDF = "NuevaInspeccionVM_PDF"
     }
 
     private val _state = MutableStateFlow(NuevaHabitacionState())
@@ -30,6 +38,21 @@ class NuevaHabitacionViewModel @Inject constructor(
 
     private val _guardadoState = MutableStateFlow<GuardadoState>(GuardadoState.Idle)
     val guardadoState = _guardadoState.asStateFlow()
+
+    // Estado para manejar el texto de "otro" daño
+    private val _textoOtroDano = MutableStateFlow("")
+    val textoOtroDano = _textoOtroDano.asStateFlow()
+
+    sealed class FinalizarInspeccionEvent {
+        object FinalizarAhora : FinalizarInspeccionEvent()
+    }
+
+
+    private val _pdfGenerationStatus = MutableSharedFlow<PdfGenerationResult>()
+    val pdfGenerationStatus = _pdfGenerationStatus.asSharedFlow()
+
+    private val _finalizarInspeccionEvent = MutableSharedFlow<FinalizarInspeccionEvent>()
+    val finalizarInspeccionEvent = _finalizarInspeccionEvent.asSharedFlow()
 
     fun init(inspeccionId: Long) {
         if (_state.value.inspeccionId == -1L && inspeccionId != -1L) {
@@ -57,9 +80,19 @@ class NuevaHabitacionViewModel @Inject constructor(
         _state.update { it.copy(comentarios = comentarios) }
     }
 
-    // ✅ Nueva función para manejar la selección de un solo daño desde el ComboBox
+    // ✅ Función para manejar selección/deselección de daños
     fun onDanoSeleccionado(dano: String) {
         _state.update { it.copy(danoSeleccionado = dano) }
+
+        // Si se selecciona algo diferente de "otro", limpiar el texto
+        if (dano != "otro") {
+            _textoOtroDano.value = ""
+        }
+    }
+
+    // ✅ Función para actualizar el texto de "otro" daño
+    fun onTextoOtroDanoChange(texto: String) {
+        _textoOtroDano.value = texto
     }
 
     fun agregarFoto(rutaFoto: String) {
@@ -72,32 +105,127 @@ class NuevaHabitacionViewModel @Inject constructor(
         _state.update { it.copy(fotosTomadas = nuevasFotos) }
     }
 
-    fun guardarHabitacionConEstado() {
+
+
+    fun guardarHabitacionConEstado(finalizarDespues: Boolean = false) {
+
+        if (_state.value.inspeccionId == -1L) {
+            _guardadoState.value = GuardadoState.Error("ID de inspección no válido.")
+            return
+        }
+        // Validaciones básicas (puedes añadir más si es necesario)
+        if (_state.value.nombreHabitacion.isBlank()) {
+            _guardadoState.value = GuardadoState.Error("El nombre de la habitación no puede estar vacío.")
+            return
+        }
+        if (_state.value.danoSeleccionado.isEmpty()) {
+            _guardadoState.value = GuardadoState.Error("Por favor, seleccione un tipo de daño.")
+            return
+        }
+        if (_state.value.danoSeleccionado == "otro" && textoOtroDano.value.isBlank()) {
+            _guardadoState.value = GuardadoState.Error("Por favor, especifique el tipo de daño 'otro'.")
+            return
+        }
+
+
+
+
+
         viewModelScope.launch {
             _guardadoState.value = GuardadoState.Cargando
+            val nombreHabitacionActual = _state.value.nombreHabitacion
             try {
-                val habitacion = withContext(Dispatchers.IO) {
-                    val habitacionEntity = HabitacionEntity(
-                        inspeccionId = state.value.inspeccionId,
-                        nombre = state.value.nombreHabitacion,
-                        alto = state.value.alto,
-                        largo = state.value.largo,
-                        ancho = state.value.ancho,
-                        // ✅ Usa el nuevo campo 'danoSeleccionado'
-                        tipoDano = state.value.danoSeleccionado,
-                        comentarios = state.value.comentarios,
-                        fotos = GsonUtils.listToJson(state.value.fotosTomadas),
-                        danos = GsonUtils.listToJson(listOf(state.value.danoSeleccionado))
-                    )
-                    Log.d(TAG, "Guardando habitación: $habitacionEntity")
-                    habitacionRepository.insertHabitacion(habitacionEntity)
+                val listaDeDanos: List<String> = if (state.value.danoSeleccionado == "otro") {
+                    if (textoOtroDano.value.isNotBlank()) {
+                        listOf(textoOtroDano.value) // Lista con el daño "otro"
+                    } else {
+                        emptyList() // O manejar como error si "otro" está seleccionado pero vacío
+                    }
+                } else {
+                    if (state.value.danoSeleccionado.isNotBlank()) {
+                        listOf(state.value.danoSeleccionado) // Lista con el daño predefinido
+                    } else {
+                        emptyList() // O manejar como error si no se seleccionó daño
+                    }
                 }
-                _guardadoState.value = GuardadoState.Exito(habitacion)
-                reiniciarFormulario() // ✅ Reinicia el formulario para una nueva entrada
+
+                // 2. Serializar la lista a JSON
+                val danosJson = GsonUtils.toJson(listaDeDanos)
+
+                val habitacion = HabitacionEntity(
+                    inspeccionId = _state.value.inspeccionId,
+                    nombre = nombreHabitacionActual,
+                    alto = _state.value.alto,
+                    largo = _state.value.largo,
+                    ancho = _state.value.ancho,
+                    danos = danosJson, // Ajusta según cómo serialices
+                    fotos = GsonUtils.listToJson(_state.value.fotosTomadas),
+                    comentarios = _state.value.comentarios
+                )
+                Log.d(TAG, "Guardando habitación: $habitacion")
+                val habitacionId = withContext(Dispatchers.IO) {
+                    habitacionRepository.insertHabitacion(habitacion)
+                }
+                _guardadoState.value = GuardadoState.Exito(habitacionId, nombreHabitacionActual)
+
+                if (finalizarDespues) {
+                    _finalizarInspeccionEvent.emit(FinalizarInspeccionEvent.FinalizarAhora)
+                } else {
+                    // Solo preparar para nueva habitación si NO estamos finalizando
+                    prepararParaNuevaHabitacionLogica()
+                }
+
             } catch (e: Exception) {
-                Log.e(TAG, "ERROR Guardando habitación: " + e.message)
-                _guardadoState.value = GuardadoState.Error(e.message ?: "Error desconocido")
+                Log.e(TAG, "ERROR Guardando habitación: ${e.message}", e)
+                _guardadoState.value = GuardadoState.Error(e.message ?: "Error desconocido al guardar")
+                // Si el guardado falla y era para finalizar, el usuario deberá reintentar o presionar terminar de nuevo.
             }
+        }
+    }
+
+    fun intentarFinalizarInspeccion() {
+        val currentNombre = _state.value.nombreHabitacion
+        // Considera qué campos hacen que una habitación sea "pendiente de guardar"
+        // Por ejemplo, si el nombre está lleno, asumimos que hay algo que guardar.
+        if (currentNombre.isNotBlank()) {
+            Log.d(TAG, "Terminar Inspección: Hay datos pendientes, intentando guardar primero.")
+            guardarHabitacionConEstado(finalizarDespues = true)
+        } else {
+            // No hay datos pendientes (o no son válidos para guardar), finalizar directamente
+            Log.d(TAG, "Terminar Inspección: No hay datos pendientes, finalizando directamente.")
+            viewModelScope.launch {
+                _finalizarInspeccionEvent.emit(FinalizarInspeccionEvent.FinalizarAhora)
+            }
+        }
+    }
+
+
+
+
+
+
+    private fun prepararParaNuevaHabitacionLogica() {
+        val currentInspeccionId = _state.value.inspeccionId
+        _state.value = NuevaHabitacionState(inspeccionId = currentInspeccionId)
+        _textoOtroDano.value = "" // Resetear el texto de "otro"
+        // _guardadoState.value = GuardadoState.Idle // Se maneja en el LaunchedEffect de la UI
+    }
+    fun prepararParaNuevaHabitacion() {
+        val currentInspeccionId = _state.value.inspeccionId
+        _state.value = NuevaHabitacionState(inspeccionId = currentInspeccionId) // Reinicia el estado
+        _guardadoState.value = GuardadoState.Idle // Resetea el estado de guardado
+    }
+
+    // ✅ Función para preparar la lista completa de daños
+    private fun prepararDanosCompletos(): String {
+        // ✅ Ahora solo tenemos un daño seleccionado, no un set
+        val danoSeleccionado = _state.value.danoSeleccionado
+
+        // ✅ Si es "otro" y tiene texto, usar el texto personalizado
+        return if (danoSeleccionado == "otro" && _textoOtroDano.value.isNotBlank()) {
+            _textoOtroDano.value
+        } else {
+            danoSeleccionado
         }
     }
 
@@ -105,10 +233,11 @@ class NuevaHabitacionViewModel @Inject constructor(
         val currentInspeccionId = _state.value.inspeccionId
         _state.update {
             NuevaHabitacionState(
-                inspeccionId = currentInspeccionId,
-                danoSeleccionado = it.danoSeleccionado // ✅ Preserva el último daño seleccionado
+                inspeccionId = currentInspeccionId
+                // Todos los demás campos tendrán sus valores por defecto
             )
         }
+        _textoOtroDano.value = ""
     }
 
     fun resetearEstadoGuardado() {
@@ -122,16 +251,25 @@ class NuevaHabitacionViewModel @Inject constructor(
         val largo: Int = 0,
         val ancho: Int = 0,
         val comentarios: String = "",
-        val danoSeleccionado: String = "daño muro", // ✅ Campo para el daño único
+        val danoSeleccionado: String = "", // ✅ Múltiples daños
         val fotosTomadas: List<String> = emptyList()
     )
 
-    // ✅ Solo una clase GuardadoState, fuera del ViewModel
     sealed class GuardadoState {
         object Idle : GuardadoState()
         object Cargando : GuardadoState()
-        data class Exito(val habitacionId: Long) : GuardadoState()
+        data class Exito(val habitacionId: Long, val nombreHabitacionGuardada: String) : GuardadoState()
         data class Error(val mensaje: String) : GuardadoState()
     }
-}
 
+    sealed class PdfGenerationResult {
+        data class Success(
+            val filePath: String?,
+            val fileUri: Uri?,
+            val fileName: String
+        ) : PdfGenerationResult()
+        data class Error(val message: String) : PdfGenerationResult()
+        object InProgress : PdfGenerationResult()
+        object Idle : PdfGenerationResult()
+    }
+}

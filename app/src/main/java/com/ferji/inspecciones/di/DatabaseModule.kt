@@ -20,10 +20,13 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(
-            context,
+            context.applicationContext, // Es buena práctica usar applicationContext
             AppDatabase::class.java,
-            "inspecciones.db"
-        ).build()
+            "ferji_inspecciones_db" // <--- USA EL NOMBRE CONSISTENTE
+        )
+            // .addMigrations(MIGRATION_X_Y, ...) // Si tuvieras migraciones explícitas
+            .fallbackToDestructiveMigration()  // <--- AÑADE ESTO AQUÍ
+            .build()
     }
 
     @Provides

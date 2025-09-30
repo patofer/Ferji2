@@ -68,7 +68,7 @@ fun PantallaInicial(
 ) {
     Surface(
         modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = Color.Black
     ) {
         Column(
             modifier = Modifier
@@ -121,6 +121,8 @@ fun PantallaInicial(
 @Composable
 fun PantallaInicialPreview() {
     FerjiTheme {
-        PantallaInicial()
-    }
+      // Añade Surface aquí para el Preview
+            PantallaInicial()
+        }
+
 }

@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <cache-path name="shared_images" path="images/"/>
-    <!-- O puedes usar files-path si prefieres que no esté en caché -->
-    <!-- <files-path name="my_images" path="images/"/> -->
+    <!-- Para PDFs en la raíz del directorio de caché -->
+    <cache-path name="pdf_cache_root" path="." />
+
+    <!-- Para imágenes en el subdirectorio 'images' del caché -->
+    <cache-path name="image_cache_subdir" path="images/" />
+
+    <!-- Si tienes fotos que guardas en filesDir/fotos_inspecciones/ como vi en logs anteriores -->
+    <!-- y necesitas compartirlas con FileProvider (e.g., para enviarlas por correo desde fuera de la app) -->
+    <!-- <files-path name="fotos_inspecciones_files" path="fotos_inspecciones/" /> -->
 </paths>

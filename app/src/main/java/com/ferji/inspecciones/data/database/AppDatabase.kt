@@ -13,17 +13,17 @@ import com.ferji.inspecciones.data.dao.InspeccionDao
 import com.ferji.inspecciones.data.model.HabitacionEntity // Asegúrate de importar tu entidad Habitación
 import com.ferji.inspecciones.data.model.InspeccionEntity
 
-val MIGRATION_1_2 = object : Migration(1, 2) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        // Aquí defines los cambios manualmente si son complejos
-        // database.execSQL("ALTER TABLE inspeccion ADD COLUMN nueva_columna TEXT")
-    }
-}
+//val MIGRATION_1_2 = object : Migration(1, 2) {
+//    override fun migrate(database: SupportSQLiteDatabase) {
+//        // Aquí defines los cambios manualmente si son complejos
+//        // database.execSQL("ALTER TABLE inspeccion ADD COLUMN nueva_columna TEXT")
+//    }
+//}
 
 @Database(
     entities = [InspeccionEntity::class, HabitacionEntity::class],
-    version = 2,
-    exportSchema = false  // Mantén false por ahora
+    version = 6,
+    exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

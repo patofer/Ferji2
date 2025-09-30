@@ -16,4 +16,8 @@ class HabitacionRepository(private val habitacionDao: HabitacionDao) {
     suspend fun updateHabitacion(habitacion: HabitacionEntity) {
         habitacionDao.update(habitacion)
     }
+
+    suspend fun getHabitacionesPorInspeccionId(inspeccionId: Long): List<HabitacionEntity> {
+        return habitacionDao.getHabitacionesPorInspeccionId(inspeccionId)
+    }
 }
