@@ -186,7 +186,7 @@ class NuevaInspeccionViewModel @Inject constructor(
         currentInspeccionIdForPdf = idDeInspeccionParaPdf // Asegurar que está seteado para las siguientes funciones
 
         viewModelScope.launch { // Corutina principal para todo el proceso de finalización
-            _uiState.update { it.copy(isLoadingGlobal = true) } // Iniciar carga global
+            _uiState.update { it.copy(isLoadingGlobal = true, isFinalizingAndNavigating = true) } // Iniciar carga global
             _pdfGenerationStatus.value = PdfGenerationResult.InProgress
             Log.d("NuevaInspVM", "finalizarInspeccionYGenerarPdf: isLoadingGlobal = true, generando PDF...")
 
@@ -230,13 +230,13 @@ class NuevaInspeccionViewModel @Inject constructor(
                 } else {
                     Log.e("NuevaInspVM", "PdfGenerator.createPdf devolvió null o no se pudo obtener URI.")
                     _pdfGenerationStatus.value = PdfGenerationResult.Error("No se pudo generar o guardar el PDF.")
-                    _uiState.update { it.copy(isLoadingGlobal = false) } // Finalizar carga global por error
+                    _uiState.update { it.copy(isLoadingGlobal = false,isFinalizingAndNavigating = false) } // Finalizar carga global por error
                 }
 
             } catch (e: Exception) {
                 Log.e("NuevaInspVM", "Excepción al generar PDF: ${e.message}", e)
                 _pdfGenerationStatus.value = PdfGenerationResult.Error("Error generando PDF: ${e.message}")
-                _uiState.update { it.copy(isLoadingGlobal = false) } // Finalizar carga global por error
+                _uiState.update { it.copy(isLoadingGlobal = false,isFinalizingAndNavigating = false) } // Finalizar carga global por error
             }
             // No resetear isLoadingGlobal aquí si proceedToFinalizeAndExit lo va a manejar
         }

@@ -14,22 +14,30 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.ferji.inspecciones.ui.components.PdfGenerationResult
 import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState
 import com.ferji.inspecciones.ui.events.NuevaInspeccionUiEvent
 import com.ferji.inspecciones.ui.theme.FerjiTheme
@@ -85,9 +93,15 @@ class NuevaInspeccionActivity : ComponentActivity() {
                 Scaffold(
                     topBar = {
                         TopAppBar(
-                            title = { Text("Nueva Inspección") },
+                            title = { Text(
+                                if (uiState.isFinalizingAndNavigating) { // <--- CONDICIÓN AQUÍ
+                                    "Procesando Inspección"
+                                } else {
+                                    "Nueva Inspección"
+                                }
+                            ) },
                             actions = {
-                                if (uiState.isLoadingGlobal) {
+                                if (uiState.isLoadingGlobal && !uiState.isFinalizingAndNavigating) {
                                     CircularProgressIndicator(
                                         modifier = Modifier
                                             .size(28.dp) // Un poco más grande para ser visible en la AppBar
@@ -100,16 +114,36 @@ class NuevaInspeccionActivity : ComponentActivity() {
                     }
                 ) { paddingValues ->
                     // Contenido Principal de la Pantalla de Nueva Inspección
-                    PantallaNuevaInspeccion(
-                        modifier = Modifier
-                            .fillMaxSize() // Ocupa el espacio que Scaffold le da al contenido
-                            .padding(paddingValues) // Aplica el padding para no quedar debajo de la TopAppBar
-                            // QUITA .verticalScroll(rememberScrollState()) DE AQUÍ
-                            // y .padding(16.dp) también si PantallaNuevaInspeccion ya tiene su propio padding interno
-                            .padding(16.dp), // Este es tu padding de contenido, aplícalo DESPUÉS del de Scaffold
-                        viewModel = viewModel,
-                        isLoading = uiState.isLoadingGlobal
-                    )
+                    if (uiState.isFinalizingAndNavigating) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues)
+                                .background(MaterialTheme.colorScheme.background), // Fondo para que no se vea transparente
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    if (uiState.isSendingEmail) "Enviando email..."
+                                    else if (uiState.pdfGenerationResult is PdfGenerationResult.InProgress) "Generando PDF..."
+                                    else "Finalizando inspección...",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                        }
+                    } else {
+                        // Contenido Principal de la Pantalla de Nueva Inspección
+                        PantallaNuevaInspeccion(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues)
+                                .padding(16.dp),
+                            viewModel = viewModel,
+                            isLoading = uiState.isLoadingGlobal // Puedes seguir usando esto para deshabilitar botones en el formulario
+                        )
+                    }
                 }
 
                 // Colectores para eventos (estos pueden permanecer fuera del Scaffold si no afectan directamente su contenido)
@@ -130,9 +164,15 @@ class NuevaInspeccionActivity : ComponentActivity() {
                                 Toast.makeText(applicationContext, event.message, Toast.LENGTH_LONG).show()
                             }
                             is NuevaInspeccionUiEvent.NavigateBackToMenu -> {
-                                Log.d(TAG, "Evento NavigateBackToMenu recibido. Volviendo al menú.")
-                                Toast.makeText(applicationContext, "Inspección completada y finalizando.", Toast.LENGTH_LONG).show()
-                                setResult(Activity.RESULT_OK)
+                                Log.d(TAG, "Evento NavigateBackToMenu recibido. Navegando al menú principal y limpiando pila.")
+                            //    Toast.makeText(applicationContext, "Inspección completada.", Toast.LENGTH_LONG).show()
+
+                                // Navegar al Menú Principal limpiando la pila anterior
+                                val intent = Intent(this@NuevaInspeccionActivity, MenuPrincipalActivity::class.java)
+                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                startActivity(intent)
+
+                                // Finalizar esta actividad (NuevaInspeccionActivity)
                                 finish()
                             }
                             is NuevaInspeccionUiEvent.RequestEmailWithPdf -> {

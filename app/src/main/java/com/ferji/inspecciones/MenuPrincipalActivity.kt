@@ -41,10 +41,11 @@ fun PantallaMenuPrincipal() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(30.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Top
     ) {
+        Spacer(modifier = Modifier.height(40.dp))
         Text(
             text = "Menú Principal",
             fontSize = 28.sp,
@@ -99,26 +100,7 @@ fun PantallaMenuPrincipal() {
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
 
-
-        // Botón para inspecciones pendientes
-        Button(
-            onClick = { /* Aquí irá la acción para ver pendientes */ },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondary,
-                contentColor = Color.White
-            )
-        ) {
-            Text(
-                text = "Inspecciones Pendientes",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
