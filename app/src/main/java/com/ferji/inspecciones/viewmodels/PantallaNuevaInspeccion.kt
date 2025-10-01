@@ -1,11 +1,20 @@
 package com.ferji.inspecciones
 
 import android.util.Log
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -14,19 +23,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ferji.inspecciones.ui.theme.FerjiTheme
 import com.ferji.inspecciones.viewmodels.NuevaInspeccionViewModel
-import com.ferji.inspecciones.utils.validarRutChileno
-import kotlin.text.contains
-import kotlin.text.isNotBlank
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modifier = Modifier) {
+fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modifier = Modifier,isLoading: Boolean ) {
     Log.d("PantallaNuevaInsp_UI", "--- PantallaNuevaInspeccion RECOMPONIENDO --- rutInsp: ${viewModel.rutInspector}, isValid: ${viewModel.isRutInspectorValid}")
     val uiState by viewModel.uiState.collectAsState()
 
@@ -39,15 +43,6 @@ fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modif
         // Si el contenido es más corto que la pantalla, esto lo centrará.
         // Si es más largo, el scroll tomará precedencia.
     ) {
-        Spacer(modifier = Modifier.height(30.dp))
-        // TÍTULO
-        Text(
-            text = "Nueva Inspección",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 24.dp, bottom = 32.dp) // Espacio arriba y abajo del título
-        )
 
         // RUT Principal
         OutlinedTextField(

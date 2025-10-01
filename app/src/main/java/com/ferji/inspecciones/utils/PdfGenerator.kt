@@ -2,34 +2,46 @@ package com.ferji.inspecciones.utils // Asegúrate de que el paquete sea correct
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import androidx.exifinterface.media.ExifInterface
 import com.ferji.inspecciones.R
 import com.ferji.inspecciones.data.model.HabitacionEntity
 import com.ferji.inspecciones.data.model.InspeccionEntity
 import com.itextpdf.io.font.constants.StandardFonts
 import com.itextpdf.io.image.ImageDataFactory
 import com.itextpdf.kernel.colors.ColorConstants
+import com.itextpdf.kernel.events.Event
+import com.itextpdf.kernel.events.IEventHandler
+import com.itextpdf.kernel.events.PdfDocumentEvent
 import com.itextpdf.kernel.font.PdfFont
 import com.itextpdf.kernel.font.PdfFontFactory
 import com.itextpdf.kernel.geom.PageSize
 import com.itextpdf.kernel.pdf.PdfDocument
 import com.itextpdf.kernel.pdf.PdfWriter
+import com.itextpdf.kernel.pdf.canvas.PdfCanvas
+import com.itextpdf.layout.Canvas
 import com.itextpdf.layout.Document
 import com.itextpdf.layout.borders.SolidBorder
 import com.itextpdf.layout.element.Cell
-import com.itextpdf.layout.element.Image
+import com.itextpdf.layout.element.Image // Asegúrate que este sea el import correcto
 import com.itextpdf.layout.element.Paragraph
 import com.itextpdf.layout.element.Table
 import com.itextpdf.layout.properties.HorizontalAlignment
+import com.itextpdf.layout.properties.Property
 import com.itextpdf.layout.properties.TextAlignment
 import com.itextpdf.layout.properties.UnitValue
 import com.itextpdf.layout.properties.VerticalAlignment
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -88,37 +100,47 @@ object PdfGenerator {
 
             val writer = PdfWriter(outputStream)
             val pdfDocument = PdfDocument(writer)
+
+            // --- PREPARAR EL LOGO PARA LA MARCA DE AGUA ---
+            var logoBytesParaMarcaDeAgua: ByteArray? = null
+            try {
+                val logoResourceId = R.raw.logo_ferji
+                context.resources.openRawResource(logoResourceId).use { inputStream ->
+                    logoBytesParaMarcaDeAgua = inputStream.readBytes()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error al cargar bytes del logo para marca de agua: ${e.message}", e)
+            }
+
+            // --- AÑADIR EL EVENT HANDLER PARA LA MARCA DE AGUA ---
+            if (logoBytesParaMarcaDeAgua != null && logoBytesParaMarcaDeAgua!!.isNotEmpty()) {
+                // Ajusta la opacidad según necesites (0.0f transparente, 1.0f opaco)
+                val watermarkHandler = WatermarkEventHandler(
+                    logoBytes = logoBytesParaMarcaDeAgua!!,
+                    targetWidthInPoints = 50f,      // <-- Especifica el ancho que quieres (ej. 30f)
+                    opacity = 0.9f,         // <-- Especifica la opacidad
+                    marginFromTop = 20f,    // <-- Especifica el margen superior
+                    marginFromRight = 20f   // <-- Especifica el margen derecho
+                )// Opacidad baja
+                pdfDocument.addEventHandler(PdfDocumentEvent.END_PAGE, watermarkHandler)
+                Log.d(TAG, "WatermarkEventHandler añadido al documento PDF.")
+            }
+
             val document = Document(pdfDocument, PageSize.A4)
-            document.setMargins(36f, 36f, 36f, 36f)
+            document.setMargins(36f, 36f, 36f, 36f) // Márgenes para el contenido principal
 
             val titleFont = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD)
             val regularFont = PdfFontFactory.createFont(StandardFonts.HELVETICA)
 
-            // --- LOGO ---
-            try {
-                val logoResourceId = R.raw.logo_ferji // Asegúrate que esté en res/raw/
-                context.resources.openRawResource(logoResourceId).use { inputStream ->
-                    val logoBytes = inputStream.readBytes()
-                    if (logoBytes.isNotEmpty()) {
-                        val logoImageData = ImageDataFactory.create(logoBytes)
-                        val logoImage = Image(logoImageData).setWidth(80f).setAutoScaleHeight(true)
-                        val headerTable = Table(UnitValue.createPercentArray(floatArrayOf(80f, 20f))).useAllAvailableWidth()
-                        headerTable.setBorder(SolidBorder(ColorConstants.WHITE, 0f))
-                        headerTable.addCell(Cell().add(Paragraph(" ")).setBorder(null))
-                        headerTable.addCell(Cell().add(logoImage.setHorizontalAlignment(HorizontalAlignment.RIGHT)).setBorder(null))
-                        document.add(headerTable)
-                        Log.d(TAG, "Logo añadido.")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error al añadir el logo: ${e.message}", e)
-            }
+            // --- EL LOGO COMO ELEMENTO EN LA CABECERA SE ELIMINA ---
+            // El WatermarkEventHandler se encargará de ello.
 
             // --- TÍTULO ---
             document.add(
                 Paragraph("INFORME DE INSPECCIÓN")
                     .setFont(titleFont).setFontSize(18f).setTextAlignment(TextAlignment.CENTER)
-                    .setMarginTop(10f).setMarginBottom(20f)
+                    .setMarginTop(20f) // Ajusta el margen superior si es necesario
+                    .setMarginBottom(20f)
             )
 
             // --- DATOS GENERALES ---
@@ -127,7 +149,7 @@ object PdfGenerator {
             addParagraphWithLabel(document, "RUT Cliente:", inspeccion.rut, regularFont)
             addParagraphWithLabel(document, "Mail Contacto:", inspeccion.mail, regularFont)
             addParagraphWithLabel(document, "Inspector:", inspeccion.rutInspector, regularFont)
-            val fechaActual = java.util.Date()
+            val fechaActual = Date()
             val fechaFormateada = try { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(fechaActual) }
             catch (e: Exception) { Log.e(TAG, "Error formateando fecha actual: ${e.message}", e); "N/A" }
             addParagraphWithLabel(document, "Fecha Informe:", fechaFormateada, regularFont, marginBottom = 15f)
@@ -140,94 +162,109 @@ object PdfGenerator {
                         .setMarginTop(10f).setMarginBottom(8f)
                 )
 
-                val NUMERO_COLUMNAS_DETALLES = 4 // Nombre, Dimensiones, Daños, Observaciones
-                // Define los anchos para las columnas de detalles
-                val columnWidths = floatArrayOf(2f, 2f, 3f, 3f) // Ajusta estos porcentajes según necesites
+                val NUMERO_COLUMNAS_DETALLES = 4
+                val columnWidths = floatArrayOf(2f, 2f, 3f, 3f)
                 val table = Table(UnitValue.createPercentArray(columnWidths)).useAllAvailableWidth()
 
-                // Encabezados de la tabla (solo para detalles, las fotos van debajo)
                 table.addHeaderCell(createHeaderCell("Habitación", titleFont))
                 table.addHeaderCell(createHeaderCell("Dimensiones (cm)", titleFont))
                 table.addHeaderCell(createHeaderCell("Daños", titleFont))
                 table.addHeaderCell(createHeaderCell("Observaciones", titleFont))
 
                 habitaciones.forEachIndexed { indexHab, habitacion ->
-                    // Fila 1: Detalles de la habitación
                     table.addCell(createContentCell(habitacion.nombre, regularFont))
                     val dimensionesStr = "Alto: ${habitacion.alto}\nLargo: ${habitacion.largo}\nAncho: ${habitacion.ancho}"
                     table.addCell(createContentCell(dimensionesStr, regularFont, TextAlignment.LEFT))
                     table.addCell(createContentCell(habitacion.getDanosList().joinToString("\n"), regularFont))
                     table.addCell(createContentCell(habitacion.comentarios, regularFont))
 
-                    // Fila 2: Contenedor de Fotos para esta habitación (abarca todas las columnas)
                     val listaDeRutasDeFotos: List<String> = habitacion.getFotosList()
-                    if (listaDeRutasDeFotos.isNotEmpty()) {
-                        val fotoContainerCell = Cell(1, NUMERO_COLUMNAS_DETALLES) // (rowspan, colspan)
-                            .setPadding(5f)
-                            .setBorderTop(SolidBorder(ColorConstants.LIGHT_GRAY, 0.5f)) // Borde superior para separar de los detalles
-                            .setBorderBottom(SolidBorder(ColorConstants.LIGHT_GRAY, 0.5f))// Borde inferior
-                            .setBorderLeft(null) // Sin bordes laterales para la celda contenedora
-                            .setBorderRight(null)
+                    Log.d(TAG, "Habitación '${habitacion.nombre}': Iniciando procesamiento de fotos. Número de rutas: ${listaDeRutasDeFotos.size}")
 
-                        // Tabla interna para organizar las fotos, ejemplo: 3 fotos por fila
+                    if (listaDeRutasDeFotos.isNotEmpty()) {
+                        val fotoContainerCell = Cell(1, NUMERO_COLUMNAS_DETALLES)
+                            .setPadding(5f)
+                            .setBorderTop(SolidBorder(ColorConstants.LIGHT_GRAY, 0.5f))
+                            .setBorderBottom(SolidBorder(ColorConstants.LIGHT_GRAY, 0.5f))
+                            .setBorderLeft(null).setBorderRight(null)
+
                         val FOTOS_POR_FILA_INTERNA = 3
-                        val internalFotoTableWidths = FloatArray(FOTOS_POR_FILA_INTERNA) { 1f } // Columnas de igual ancho
+                        val internalFotoTableWidths = FloatArray(FOTOS_POR_FILA_INTERNA) { 1f }
                         val fotosTableInterna = Table(UnitValue.createPercentArray(internalFotoTableWidths))
-                            .useAllAvailableWidth()
-                            .setBorder(null) // Sin borde para esta tabla interna
+                            .useAllAvailableWidth().setBorder(null)
 
                         var fotosEnFilaActualInterna = 0
-                        listaDeRutasDeFotos.forEach { fotoPathString ->
+                        var bitmapRotado: Bitmap? = null // Mover fuera del forEach para reciclar en finally
+                        listaDeRutasDeFotos.forEachIndexed { index, fotoPathString ->
+                            Log.d(TAG, "Procesando foto ${index + 1}/${listaDeRutasDeFotos.size}: '$fotoPathString'")
+                            bitmapRotado = null // Resetear para cada foto
                             if (fotoPathString.isNotBlank()) {
                                 try {
-                                    val file = File(fotoPathString)
-                                    if (file.exists()) {
-                                        val imageBytes = file.readBytes()
+                                    Log.d(TAG, "Intentando cargar y rotar: '$fotoPathString'")
+                                    bitmapRotado = cargarYRotarBitmap(fotoPathString, 150f, 150f) // Ajusta estos tamaños si es necesario
+
+                                    if (bitmapRotado != null) {
+                                        Log.d(TAG, "Bitmap rotado obtenido para '$fotoPathString'. Dimensiones: ${bitmapRotado!!.width}x${bitmapRotado!!.height}")
+                                        val stream = ByteArrayOutputStream()
+                                        Log.d(TAG, "Comprimiendo bitmap a JPEG para '$fotoPathString'...")
+                                        val successCompress = bitmapRotado!!.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+                                        if (!successCompress) {
+                                            Log.w(TAG, "bitmapRotado.compress devolvió false para '$fotoPathString'")
+                                        }
+                                        val imageBytes = stream.toByteArray()
+                                        Log.d(TAG, "Tamaño de imageBytes para '$fotoPathString': ${imageBytes.size}")
+
                                         if (imageBytes.isNotEmpty()) {
+                                            Log.d(TAG, "Creando ImageData para '$fotoPathString'")
                                             val imageData = ImageDataFactory.create(imageBytes)
                                             val image = Image(imageData)
-                                                .setAutoScale(true) // iText intentará escalar para que quepa en la celda
+                                                .setAutoScale(true)
                                                 .setTextAlignment(TextAlignment.CENTER)
-                                            // .setMaxHeight(80f) // Opcional: limitar altura
 
+                                            Log.d(TAG, "Añadiendo imagen a la celda para '$fotoPathString'")
                                             val imageCell = Cell().add(image).setBorder(null).setPadding(2f).setTextAlignment(TextAlignment.CENTER)
                                             fotosTableInterna.addCell(imageCell)
                                             fotosEnFilaActualInterna++
-
-                                            if (fotosEnFilaActualInterna == FOTOS_POR_FILA_INTERNA) {
-                                                // La tabla interna automáticamente pasa a la siguiente fila
-                                                // cuando se llena el número de columnas definidas
-                                                fotosEnFilaActualInterna = 0
-                                            }
-                                        } else { Log.w(TAG, "Bytes vacíos: $fotoPathString") }
+                                            Log.d(TAG, "Imagen añadida correctamente para '$fotoPathString'. fotosEnFilaActualInterna: $fotosEnFilaActualInterna")
+                                        } else {
+                                            addErrorCellToFotoTable(fotosTableInterna, "Error img (vacía)", regularFont)
+                                            fotosEnFilaActualInterna++
+                                        }
                                     } else {
-                                        Log.w(TAG, "Foto no existe: $fotoPathString")
-                                        val errorCell = Cell().add(Paragraph("Img no encontrada").setFont(regularFont).setFontSize(7f)).setBorder(null).setPadding(2f)
-                                        fotosTableInterna.addCell(errorCell)
+                                        addErrorCellToFotoTable(fotosTableInterna, "Img no cargada", regularFont)
                                         fotosEnFilaActualInterna++
                                     }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error cargando foto '$fotoPathString': ${e.message}", e)
-                                    val errorCell = Cell().add(Paragraph("Error img").setFont(regularFont).setFontSize(7f)).setBorder(null).setPadding(2f)
-                                    fotosTableInterna.addCell(errorCell)
-                                    fotosEnFilaActualInterna++
-                                } finally {
+
                                     if (fotosEnFilaActualInterna == FOTOS_POR_FILA_INTERNA) {
-                                        fotosEnFilaActualInterna = 0 // Reset para la siguiente iteración
+                                        Log.d(TAG, "Fila interna de fotos completada. Reseteando contador.")
+                                        fotosEnFilaActualInterna = 0
                                     }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "EXCEPCIÓN al procesar foto para PDF '$fotoPathString': ${e.message}", e)
+                                    addErrorCellToFotoTable(fotosTableInterna, "Error img (exc)", regularFont)
+                                    fotosEnFilaActualInterna++
+                                    if (fotosEnFilaActualInterna == FOTOS_POR_FILA_INTERNA) fotosEnFilaActualInterna = 0
+                                } finally {
+                                    bitmapRotado?.recycle() // Reciclar el bitmap después de usarlo
+                                    Log.d(TAG, "Bloque finally para '$fotoPathString'. Bitmap reciclado (si existía). fotosEnFilaActualInterna: $fotosEnFilaActualInterna")
                                 }
+                            } else {
+                                Log.w(TAG, "Ruta de foto vacía o en blanco encontrada en el índice $index.")
                             }
                         }
-                        // Completar la última fila de la tabla interna de fotos si no está llena
-                        if (fotosEnFilaActualInterna > 0) {
+                        Log.d(TAG, "Procesamiento de todas las rutas de fotos finalizado para la habitación '${habitacion.nombre}'. fotosEnFilaActualInterna (antes de completar): $fotosEnFilaActualInterna")
+
+                        if (fotosEnFilaActualInterna > 0 && fotosEnFilaActualInterna < FOTOS_POR_FILA_INTERNA) {
+                            Log.d(TAG, "Completando la última fila de fotos con ${FOTOS_POR_FILA_INTERNA - fotosEnFilaActualInterna} celdas vacías.")
                             for (i in fotosEnFilaActualInterna until FOTOS_POR_FILA_INTERNA) {
-                                fotosTableInterna.addCell(Cell().add(Paragraph(" ")).setBorder(null)) // Celda vacía
+                                fotosTableInterna.addCell(Cell().add(Paragraph(" ")).setBorder(null))
                             }
                         }
                         fotoContainerCell.add(fotosTableInterna)
                         table.addCell(fotoContainerCell)
+                        Log.d(TAG, "Contenedor de fotos añadido a la tabla principal para la habitación '${habitacion.nombre}'.")
                     } else {
-                        // Si no hay fotos, añade una celda que abarque y diga "Sin fotos"
+                        Log.d(TAG, "Habitación '${habitacion.nombre}': No hay rutas de fotos para procesar.")
                         val noFotoCell = Cell(1, NUMERO_COLUMNAS_DETALLES)
                             .add(Paragraph("Sin fotos registradas")
                                 .setFont(regularFont).setFontSize(8f)
@@ -237,11 +274,10 @@ object PdfGenerator {
                             .setBorderLeft(null).setBorderRight(null)
                         table.addCell(noFotoCell)
                     }
-                    // Añade un pequeño espacio visual después de cada habitación completa (detalles + fotos)
+
                     if (indexHab < habitaciones.size - 1) {
                         val spacerCell = Cell(1, NUMERO_COLUMNAS_DETALLES)
-                            .setBorder(null) // Sin bordes
-                            .setHeight(10f)  // Altura del espacio
+                            .setBorder(null).setHeight(10f)
                         table.addCell(spacerCell)
                     }
                 }
@@ -279,8 +315,8 @@ object PdfGenerator {
         return Cell().add(
             Paragraph(text).setFont(font).setFontSize(10f).setBold()
                 .setTextAlignment(TextAlignment.CENTER)
-                .setVerticalAlignment(VerticalAlignment.MIDDLE) // Mejor alineación vertical
-        ).setPadding(4f).setBackgroundColor(ColorConstants.LIGHT_GRAY) // Fondo para cabeceras
+                .setVerticalAlignment(VerticalAlignment.MIDDLE)
+        ).setPadding(4f).setBackgroundColor(ColorConstants.LIGHT_GRAY)
     }
 
     private fun createContentCell(text: String?, font: PdfFont, alignment: TextAlignment = TextAlignment.LEFT): Cell {
@@ -288,5 +324,83 @@ object PdfGenerator {
             Paragraph(text ?: "N/A").setFont(font).setFontSize(9f)
                 .setTextAlignment(alignment)
         ).setPadding(4f)
+    }
+
+    private fun addErrorCellToFotoTable(table: Table, errorMessage: String, font: PdfFont) {
+        val errorCell = Cell().add(Paragraph(errorMessage).setFont(font).setFontSize(7f)).setBorder(null).setPadding(2f)
+        table.addCell(errorCell)
+    }
+
+    private fun cargarYRotarBitmap(rutaFoto: String, maxWidth: Float, maxHeight: Float): Bitmap? {
+        var originalBitmap: Bitmap? = null // Para asegurar el reciclaje en caso de error temprano
+        try {
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeFile(rutaFoto, options)
+
+            options.inSampleSize = calculateInSampleSize(options, maxWidth.toInt(), maxHeight.toInt())
+            options.inJustDecodeBounds = false
+            originalBitmap = BitmapFactory.decodeFile(rutaFoto, options)
+            if (originalBitmap == null) {
+                Log.e(TAG, "BitmapFactory.decodeFile devolvió null después de inSampleSize para: $rutaFoto")
+                return null
+            }
+
+            val exif = ExifInterface(rutaFoto)
+            val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+
+            val matrix = Matrix()
+            var needsRotation = true
+            when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+                // Aquí puedes añadir más casos para volteos si es necesario
+                ExifInterface.ORIENTATION_NORMAL, ExifInterface.ORIENTATION_UNDEFINED -> needsRotation = false
+                else -> needsRotation = false
+            }
+
+            if (needsRotation && !matrix.isIdentity) {
+                val rotatedBitmap = Bitmap.createBitmap(
+                    originalBitmap, 0, 0,
+                    originalBitmap.width, originalBitmap.height,
+                    matrix, true
+                )
+                if (rotatedBitmap != originalBitmap) { // Solo recicla el original si se creó uno nuevo
+                    originalBitmap.recycle()
+                }
+                return rotatedBitmap
+            }
+            return originalBitmap // Devuelve el original (ya escalado) si no se necesitó rotación
+        } catch (e: IOException) {
+            Log.e(TAG, "IOException al cargar o rotar bitmap '$rutaFoto': ${e.message}")
+            originalBitmap?.recycle()
+            return null
+        } catch (e: OutOfMemoryError) {
+            Log.e(TAG, "OutOfMemoryError al cargar o rotar bitmap '$rutaFoto': ${e.message}")
+            originalBitmap?.recycle()
+            return null
+        } catch (e: Exception) {
+            Log.e(TAG, "Excepción general al cargar o rotar bitmap '$rutaFoto': ${e.message}", e)
+            originalBitmap?.recycle()
+            return null
+        }
+    }
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val (height: Int, width: Int) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+
+        if (reqWidth <= 0 || reqHeight <= 0) return 1 // No escalar si las dimensiones no son válidas
+
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
 }

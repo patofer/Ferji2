@@ -85,6 +85,8 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.adapters)
     implementation(libs.androidx.lifecycle.viewmodel.android)
+    implementation(libs.androidx.foundation)
+    implementation(libs.androidx.exifinterface)
     ksp(libs.androidx.room.compiler.ksp)
 
     // Hilt - VERSIÓN CORREGIDA

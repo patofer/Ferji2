@@ -14,27 +14,29 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.* // Necesario para MaterialTheme, etc.
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.ferji.inspecciones.ui.components.PdfGenerationResult
+import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState
 import com.ferji.inspecciones.ui.events.NuevaInspeccionUiEvent
 import com.ferji.inspecciones.ui.theme.FerjiTheme
 import com.ferji.inspecciones.viewmodels.NuevaInspeccionViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import java.io.File
-import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState
-
-
-
 
 
 @AndroidEntryPoint
@@ -54,6 +56,7 @@ class NuevaInspeccionActivity : ComponentActivity() {
         const val EXTRA_INSPECCION_ID = "INSPECCION_ID"
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate")
@@ -62,10 +65,9 @@ class NuevaInspeccionActivity : ComponentActivity() {
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
             Log.d(TAG, "Resultado de NuevaHabitacionActivity - resultCode: ${result.resultCode}")
-            if (result.resultCode == RESULT_INSPECCION_FINALIZADA) { // Solo reacciona a este
+            if (result.resultCode == RESULT_INSPECCION_FINALIZADA) {
                 Log.d(TAG, "RESULT_INSPECCION_FINALIZADA recibido. Procediendo a generar PDF y finalizar.")
-                // El ViewModel se encarga de isFinalizingInspection
-                viewModel.finalizarInspeccionYGenerarPdf() // Ya no necesitas handleFinalizarInspeccionConPdf() como intermediario
+                viewModel.finalizarInspeccionYGenerarPdf()
             } else if (result.resultCode == Activity.RESULT_CANCELED) {
                 Log.d(TAG, "NuevaHabitacionActivity fue cancelada o devuelta sin finalizar.")
                 // Opcional: Resetear algún estado en el ViewModel si es necesario.
@@ -77,108 +79,95 @@ class NuevaInspeccionActivity : ComponentActivity() {
 
         setContent {
             val uiState: NuevaInspeccionScreenUiState by viewModel.uiState.collectAsState()
-            FerjiTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background // <-- ESTO ES CLAVE
-                ) { // Contenedor para la pantalla y el overlay de carga
-                    PantallaNuevaInspeccion(viewModel = viewModel) // Tu pantalla de formulario
+            // val context = LocalContext.current // Si lo necesitas
 
-                    // Indicador de Carga Global mientras se finaliza la inspección
-                    if (uiState.isLoadingGlobal) {
-                        Surface(
-                            color = Color.Black.copy(alpha = 0.5f), // Fondo semitransparente
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary)
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        "Finalizando inspección...",
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        style = MaterialTheme.typography.bodyLarge
+            FerjiTheme {
+                Scaffold(
+                    topBar = {
+                        TopAppBar(
+                            title = { Text("Nueva Inspección") },
+                            actions = {
+                                if (uiState.isLoadingGlobal) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .size(28.dp) // Un poco más grande para ser visible en la AppBar
+                                            .padding(end = 8.dp),
+                                        strokeWidth = 3.dp // Un poco más grueso
                                     )
                                 }
                             }
-                        }
+                        )
                     }
+                ) { paddingValues ->
+                    // Contenido Principal de la Pantalla de Nueva Inspección
+                    PantallaNuevaInspeccion(
+                        modifier = Modifier
+                            .fillMaxSize() // Ocupa el espacio que Scaffold le da al contenido
+                            .padding(paddingValues) // Aplica el padding para no quedar debajo de la TopAppBar
+                            // QUITA .verticalScroll(rememberScrollState()) DE AQUÍ
+                            // y .padding(16.dp) también si PantallaNuevaInspeccion ya tiene su propio padding interno
+                            .padding(16.dp), // Este es tu padding de contenido, aplícalo DESPUÉS del de Scaffold
+                        viewModel = viewModel,
+                        isLoading = uiState.isLoadingGlobal
+                    )
+                }
 
-                    // Colector para eventos UI generales del ViewModel
-                    LaunchedEffect(key1 = Unit) {
-                        viewModel.uiEvents.collectLatest { event ->
-                            when (event) {
-                                is NuevaInspeccionUiEvent.NavigateToNewRoom -> {
-                                    Log.d(TAG, "Navegando a NuevaHabitacion con ID: ${event.inspeccionId}")
-                                    val intent = Intent(
-                                        this@NuevaInspeccionActivity,
-                                        NuevaHabitacionActivity::class.java
-                                    ).apply {
-                                        putExtra(EXTRA_INSPECCION_ID, event.inspeccionId)
-                                    }
-                                    nuevaHabitacionLauncher.launch(intent)
+                // Colectores para eventos (estos pueden permanecer fuera del Scaffold si no afectan directamente su contenido)
+                LaunchedEffect(key1 = Unit) {
+                    viewModel.uiEvents.collectLatest { event ->
+                        when (event) {
+                            is NuevaInspeccionUiEvent.NavigateToNewRoom -> {
+                                Log.d(TAG, "Navegando a NuevaHabitacion con ID: ${event.inspeccionId}")
+                                val intent = Intent(
+                                    this@NuevaInspeccionActivity,
+                                    NuevaHabitacionActivity::class.java
+                                ).apply {
+                                    putExtra(EXTRA_INSPECCION_ID, event.inspeccionId)
                                 }
-                                is NuevaInspeccionUiEvent.ShowSnackbar -> {
-                                    Toast.makeText(applicationContext, event.message, Toast.LENGTH_LONG).show()
-                                }
-                                // En NuevaInspeccionActivity.kt, dentro de setContent -> LaunchedEffect(key1 = Unit) { viewModel.uiEvents.collectLatest { event ->
-                                is NuevaInspeccionUiEvent.NavigateBackToMenu -> {
-                                    Log.d(TAG, "Evento NavigateBackToMenu recibido. Volviendo al menú.")
-                                    // El Toast "Inspección completada" puede ser útil aquí.
-                                    Toast.makeText(applicationContext, "Inspeccion completada y finalizando.", Toast.LENGTH_LONG).show()
-                                    setResult(Activity.RESULT_OK) // Informa éxito a la actividad anterior (Menú Principal)
-                                    finish() // Cierra NuevaInspeccionActivity
-                                }
-                                is NuevaInspeccionUiEvent.RequestEmailWithPdf -> {
-                                    // Maneja este evento si es relevante para la Activity.
-                                    // En el flujo actual, el ViewModel inicia el envío de email
-                                    // automáticamente como parte de proceedToFinalizeAndExit().
-                                    // Esta rama podría usarse si tienes un botón manual "Reenviar Email".
-                                    Log.d(TAG, "Evento RequestEmailWithPdf recibido (manual/opcional). Inspeccion ID: ${event.inspeccionId}, PDF URI: ${event.pdfUri}")
-                                    Toast.makeText(applicationContext, "Solicitud de envío de email (manual) recibida.", Toast.LENGTH_SHORT).show()
-                                    // Podrías llamar a viewModel.solicitarEnvioDeEmail() aquí si es un reintento
-                                    // o si este evento se dispara por una acción explícita del usuario.
-                                }
+                                nuevaHabitacionLauncher.launch(intent)
+                            }
+                            is NuevaInspeccionUiEvent.ShowSnackbar -> {
+                                Toast.makeText(applicationContext, event.message, Toast.LENGTH_LONG).show()
+                            }
+                            is NuevaInspeccionUiEvent.NavigateBackToMenu -> {
+                                Log.d(TAG, "Evento NavigateBackToMenu recibido. Volviendo al menú.")
+                                Toast.makeText(applicationContext, "Inspección completada y finalizando.", Toast.LENGTH_LONG).show()
+                                setResult(Activity.RESULT_OK)
+                                finish()
+                            }
+                            is NuevaInspeccionUiEvent.RequestEmailWithPdf -> {
+                                Log.d(TAG, "Evento RequestEmailWithPdf recibido. Inspeccion ID: ${event.inspeccionId}, PDF URI: ${event.pdfUri}")
+                                Toast.makeText(applicationContext, "Solicitud de envío de email recibida.", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
+                }
 
-                    // Colector para el estado de generación de PDF (principalmente para logs y Toasts informativos)
-                    LaunchedEffect(key1 = Unit) {
-                        viewModel.pdfGenerationStatus.collectLatest { pdfResult ->
-                            when (pdfResult) {
-                                is PdfGenerationResult.Success -> {
-                                    // Determinar la ubicación del archivo para el mensaje
-                                    val ubicacion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pdfResult.fileUri != null) {
-                                        "Guardado en Descargas (URI)."
-                                    } else if (pdfResult.filePath != null) {
-                                        "Guardado en: ${File(pdfResult.filePath).name} (Descargas)" // Muestra solo el nombre del archivo
-                                    } else {
-                                        "Ubicación desconocida."
-                                    }
-                                    val mensajePdf = "PDF '${pdfResult.fileName ?: "desconocido"}' generado. $ubicacion" // Usar fileName si está disponible
-                                    //Toast.makeText(applicationContext, mensajePdf, Toast.LENGTH_LONG).show()
-                                    Log.i(TAG, "PDF Success. Nombre: ${pdfResult.fileName}, Path: ${pdfResult.filePath}, URI: ${pdfResult.fileUri}")
-                                    // La lógica de solicitar email y finalizar la actividad ahora es manejada
-                                    // por el ViewModel a través de proceedToFinalizeAndExit()
+                LaunchedEffect(key1 = Unit) {
+                    viewModel.pdfGenerationStatus.collectLatest { pdfResult ->
+                        when (pdfResult) {
+                            is com.ferji.inspecciones.ui.components.PdfGenerationResult.Success -> { // Asegúrate de usar el tipo común
+                                val ubicacion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pdfResult.fileUri != null) {
+                                    "Guardado en Descargas (URI)."
+                                } else if (pdfResult.filePath != null) {
+                                    "Guardado en: ${File(pdfResult.filePath).name} (Descargas)"
+                                } else {
+                                    "Ubicación desconocida."
                                 }
-                                is PdfGenerationResult.Error -> {
-                                //    Toast.makeText(applicationContext, "Error PDF: ${pdfResult.message}", Toast.LENGTH_LONG).show()
-                                    Log.e(TAG, "PDF Error: ${pdfResult.message}")
-                                    // Si hay un error de PDF, proceedToFinalizeAndExit en el VM no se llamará.
-                                    // La UI de carga (isFinalizingInspection) no se activará desde este error.
-                                    // El ViewModel debería resetear isFinalizingInspection = false si el error de PDF
-                                    // ocurre dentro de la corutina de finalizarInspeccionYGenerarPdf.
-                                }
-                                is PdfGenerationResult.InProgress -> {
-                                    Log.d(TAG, "PDF InProgress")
-                                    // El indicador de carga global (isFinalizingInspection) es más prominente.
-                                    // Podrías mostrar un Toast aquí si el indicador global no existiera.
-                                    // Toast.makeText(applicationContext, "Generando PDF...", Toast.LENGTH_SHORT).show()
-                                }
-                                is PdfGenerationResult.Idle -> {
-                                    Log.d(TAG, "PDF Idle")
-                                }
+                                val mensajePdf = "PDF '${pdfResult.fileName ?: "desconocido"}' generado. $ubicacion"
+                                Log.i(TAG, "PDF Success: $mensajePdf")
+                                // Toast.makeText(applicationContext, mensajePdf, Toast.LENGTH_LONG).show() // Opcional
+                            }
+                            is com.ferji.inspecciones.ui.components.PdfGenerationResult.Error -> {
+                                Log.e(TAG, "PDF Error: ${pdfResult.message}")
+                                Toast.makeText(applicationContext, "Error PDF: ${pdfResult.message}", Toast.LENGTH_LONG).show()
+                            }
+                            is com.ferji.inspecciones.ui.components.PdfGenerationResult.InProgress -> {
+                                Log.d(TAG, "PDF InProgress")
+                                // Ya no necesitas un Toast aquí, el indicador en la TopAppBar o en el contenido es suficiente.
+                            }
+                            is com.ferji.inspecciones.ui.components.PdfGenerationResult.Idle -> {
+                                Log.d(TAG, "PDF Idle")
                             }
                         }
                     }

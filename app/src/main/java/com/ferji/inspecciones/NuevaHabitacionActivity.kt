@@ -3,6 +3,7 @@ package com.ferji.inspecciones
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -13,6 +14,7 @@ import androidx.activity.result.launch
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -34,9 +36,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.ferji.inspecciones.ui.components.DanoDropdown
 
@@ -45,11 +49,18 @@ import com.ferji.inspecciones.ui.theme.FerjiTheme
 import com.ferji.inspecciones.utils.FileUtils
 import com.ferji.inspecciones.viewmodels.NuevaHabitacionViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.io.File
 
 @AndroidEntryPoint
 class NuevaHabitacionActivity : ComponentActivity() {
+
+    private val _preparandoParaFinalizar = MutableStateFlow(false)
+    val preparandoParaFinalizar: StateFlow<Boolean> = _preparandoParaFinalizar.asStateFlow()
 
     companion object {
         const val EXTRA_INSPECCION_ID = "extra_inspeccion_id_nueva_habitacion" // ¡AQUÍ ESTÁ!
@@ -57,6 +68,7 @@ class NuevaHabitacionActivity : ComponentActivity() {
         // pero debe coincidir con cómo la usas en NuevaInspeccionActivity
     }
     private val viewModel: NuevaHabitacionViewModel by viewModels()
+    private var latestTmpUri: Uri? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -70,27 +82,45 @@ class NuevaHabitacionActivity : ComponentActivity() {
         }
     }
 
+    private fun getTmpFileUri(): Uri {
+        // Crea un archivo temporal en el directorio cache de tu app
+        val tmpFile = File.createTempFile("tmp_image_file", ".jpg", cacheDir).apply {
+            createNewFile()
+            // Opcional: deleteOnExit() // Si quieres que se borre cuando la VM termine,
+            // pero como lo procesas y guardas en otro lado, quizás no sea necesario.
+        }
+        // Obtiene el URI usando FileProvider (asegúrate que tu FileProvider esté configurado
+        // en AndroidManifest.xml y res/xml/file_paths.xml)
+        return FileProvider.getUriForFile(applicationContext, "${BuildConfig.APPLICATION_ID}.provider", tmpFile)
+    }
+
     private val cameraLauncher = registerForActivityResult(
-        ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        bitmap?.let {
-            val nombreArchivo = "habitacion_${System.currentTimeMillis()}.jpg"
-            Log.d("NuevaHabitacionActivity", "Intentando guardar bitmap como: $nombreArchivo")
+        ActivityResultContracts.TakePicture() // <-- CAMBIO AQUÍ
+    ) { success: Boolean -> // 'success' indica si la foto se guardó en el URI que le pasaste
+        if (success) {
+            latestTmpUri?.let { uri ->
+                Log.d("NuevaHabitacionActivity", "Foto tomada y guardada en URI temporal: $uri")
+                val nombreArchivo = "habitacion_${System.currentTimeMillis()}.jpg"
+                // Ahora llamas a FileUtils.guardarBitmapEnInterno con el URI
+                val rutaFotoGuardada = FileUtils.guardarBitmapEnInterno(
+                    this,
+                    uri, // <-- Pasas el URI del archivo temporal de la cámara
+                    nombreArchivo
+                )
 
-            val rutaFoto = FileUtils.guardarBitmapEnInterno(
-                this,
-                it,   // Bitmap de la foto
-                nombreArchivo
-            )
-
-            if (rutaFoto.isNotBlank()) {
-                Log.d("NuevaHabitacionActivity", "Bitmap guardado en: $rutaFoto")
-                viewModel.agregarFoto(rutaFoto)
-            } else {
-                Log.e("NuevaHabitacionActivity", "Error: rutaFoto está vacía")
-                Toast.makeText(this, "Error al guardar la foto.", Toast.LENGTH_SHORT).show()
+                if (rutaFotoGuardada != null) {
+                    Log.d("NuevaHabitacionActivity", "Bitmap procesado y guardado en: $rutaFotoGuardada")
+                    viewModel.agregarFoto(rutaFotoGuardada)
+                } else {
+                    Log.e("NuevaHabitacionActivity", "Error: rutaFoto está vacía después de procesar el URI")
+                    Toast.makeText(this, "Error al procesar y guardar la foto.", Toast.LENGTH_SHORT).show()
+                }
+            } ?: run {
+                Log.e("NuevaHabitacionActivity", "latestTmpUri es null después de tomar la foto con éxito.")
+                Toast.makeText(this, "Error al obtener URI de la foto.", Toast.LENGTH_SHORT).show()
             }
-        } ?: run {
+        } else {
+            Log.d("NuevaHabitacionActivity", "La toma de fotos no fue exitosa o fue cancelada.")
             Toast.makeText(this, "No se pudo capturar la foto", Toast.LENGTH_SHORT).show()
         }
     }
@@ -137,7 +167,8 @@ class NuevaHabitacionActivity : ComponentActivity() {
                             ) == PackageManager.PERMISSION_GRANTED
                         ) {
                             // Si ya tienes el permiso, lanza la cámara directamente
-                            cameraLauncher.launch(null)
+                            latestTmpUri = getTmpFileUri()
+                            cameraLauncher.launch(latestTmpUri)
                         } else {
                             // Si no tienes el permiso, solicítalo al usuario
                             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
@@ -220,11 +251,15 @@ fun PantallaNuevaHabitacion(
                 value = state.nombreHabitacion,
                 onValueChange = { viewModel.onNombreChange(it) },
                 label = { Text("Nombre habitación") },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
             )
 
             Column(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 DanoDropdown(
@@ -237,19 +272,53 @@ fun PantallaNuevaHabitacion(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(value = state.alto.takeIf { it != 0 }?.toString() ?: "", onValueChange = { viewModel.onAltoChange(it.toIntOrNull() ?: 0) }, label = { Text("Alto (cm)") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = state.largo.takeIf { it != 0 }?.toString() ?: "", onValueChange = { viewModel.onLargoChange(it.toIntOrNull() ?: 0) }, label = { Text("Largo (cm)") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(value = state.ancho.takeIf { it != 0 }?.toString() ?: "", onValueChange = { viewModel.onAnchoChange(it.toIntOrNull() ?: 0) }, label = { Text("Ancho (cm)") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(
+                    value = state.alto.takeIf { it != 0 }?.toString() ?: "",
+                    onValueChange = { viewModel.onAltoChange(it.toIntOrNull() ?: 0) },
+                    label = { Text("Alto (cm)") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number // <--- ¡AQUÍ ESTÁ LA CLAVE!
+                        // imeAction = ImeAction.Next // Opcional: Cambia el botón Enter a "Siguiente"
+                    ),
+                    singleLine = true // Recomendado para campos numéricos
+                )
+                OutlinedTextField(
+                    value = state.largo.takeIf { it != 0 }?.toString() ?: "",
+                    onValueChange = { viewModel.onLargoChange(it.toIntOrNull() ?: 0) },
+                    label = { Text("Largo (cm)") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number // <--- TECLADO NUMÉRICO
+                        // imeAction = ImeAction.Next // Opcional
+                    ),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = state.ancho.takeIf { it != 0 }?.toString() ?: "",
+                    onValueChange = { viewModel.onAnchoChange(it.toIntOrNull() ?: 0) },
+                    label = { Text("Ancho (cm)") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number // <--- TECLADO NUMÉRICO
+                        // imeAction = ImeAction.Done // Opcional: Cambia el botón Enter a "Hecho" si es el último campo
+                    ),
+                    singleLine = true
+                )
             }
 
             OutlinedTextField(
                 value = state.comentarios,
                 onValueChange = { viewModel.onComentariosChange(it) },
                 label = { Text("Comentarios") },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
                 maxLines = 3
             )
 

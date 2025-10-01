@@ -6,18 +6,23 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color // Asegúrate de tener esta importación si usas `mostrarMensajeGlobal`
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ferji.inspecciones.data.model.HabitacionEntity
 import com.ferji.inspecciones.data.model.InspeccionEntity
-import com.ferji.inspecciones.data.network.sendgrid.* // Modelos de SendGrid
+import com.ferji.inspecciones.data.network.sendgrid.Attachment
+import com.ferji.inspecciones.data.network.sendgrid.Content
+import com.ferji.inspecciones.data.network.sendgrid.EmailAddress
+import com.ferji.inspecciones.data.network.sendgrid.Personalization
+import com.ferji.inspecciones.data.network.sendgrid.SendGridApiService
+import com.ferji.inspecciones.data.network.sendgrid.SendGridMail
 import com.ferji.inspecciones.data.repository.HabitacionRepository
 import com.ferji.inspecciones.data.repository.InspeccionRepository
-import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState // Asumo que esta clase existe y tiene isLoadingGlobal, isSendingEmail, etc.
+import com.ferji.inspecciones.ui.components.PdfGenerationResult
+import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState
 import com.ferji.inspecciones.ui.events.NuevaInspeccionUiEvent
-import com.ferji.inspecciones.utils.FileUtils // Utilidad para Base64
+import com.ferji.inspecciones.utils.FileUtils
 import com.ferji.inspecciones.utils.PdfGenerator
 import com.ferji.inspecciones.utils.esEmailValido
 import com.ferji.inspecciones.utils.validarRutChileno
@@ -31,7 +36,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import com.ferji.inspecciones.ui.components.PdfGenerationResult
+
 // No necesitas kotlinx.coroutines.delay si no lo usas explícitamente
 
 
@@ -260,7 +265,7 @@ class NuevaInspeccionViewModel @Inject constructor(
             Log.d("NuevaInspVM", "proceedToFinalizeAndExit: isSendingEmail = false, resultado del envío: $emailEnviadoConExito")
 
             if (emailEnviadoConExito) {
-                _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("✅ Email enviado correctamente.", isError = false))
+             //   _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("✅ Email enviado correctamente.", isError = false))
             } else {
                 // El error específico ya debería haberse logueado o enviado como Snackbar desde las funciones internas
                 _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("❌ Falló el envío del email. Revise la conexión o los logs.", isError = true))

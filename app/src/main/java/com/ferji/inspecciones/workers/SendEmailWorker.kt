@@ -61,7 +61,7 @@ class SendEmailWorker @AssistedInject constructor(
             val fromEmail = EmailAddress(email = "patriciofernandez@gmail.com", name = "Equipo Ferji Inspecciones")
             val nombreClienteParaEmail = "Cliente Inspección" // O obtener de 'inspeccion'
             val toList = listOf(EmailAddress(email = inspeccion.mail ?: return Result.failure(), name = nombreClienteParaEmail))
-            val ccEmail = "siniestros@ferji.cl"
+            val ccEmail = "PFERNANDEZA@GMAIL.COM"
             val ccName = "Ferji Siniestros"
             val ccList = if (inspeccion.mail?.equals(ccEmail, ignoreCase = true) != true) {
                 listOf(EmailAddress(email = ccEmail, name = ccName))

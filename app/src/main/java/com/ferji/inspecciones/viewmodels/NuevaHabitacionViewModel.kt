@@ -15,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
@@ -53,6 +54,10 @@ class NuevaHabitacionViewModel @Inject constructor(
 
     private val _finalizarInspeccionEvent = MutableSharedFlow<FinalizarInspeccionEvent>()
     val finalizarInspeccionEvent = _finalizarInspeccionEvent.asSharedFlow()
+
+    private val _preparandoParaFinalizar = MutableStateFlow(false)
+    val preparandoParaFinalizar: StateFlow<Boolean> = _preparandoParaFinalizar.asStateFlow()
+
 
     fun init(inspeccionId: Long) {
         if (_state.value.inspeccionId == -1L && inspeccionId != -1L) {
@@ -107,49 +112,67 @@ class NuevaHabitacionViewModel @Inject constructor(
 
 
 
+    // En NuevaHabitacionViewModel.kt
+
+// ... (asegúrate de que _preparandoParaFinalizar, TAG, _state, textoOtroDano, etc., estén definidos)
+
     fun guardarHabitacionConEstado(finalizarDespues: Boolean = false) {
 
+        // Validaciones previas a la corutina (rápidas)
         if (_state.value.inspeccionId == -1L) {
             _guardadoState.value = GuardadoState.Error("ID de inspección no válido.")
+            if (finalizarDespues) {
+                Log.d(TAG, "Guardado falló (ID inspección) y era para finalizar. Reseteando preparandoParaFinalizar.")
+                _preparandoParaFinalizar.value = false // Resetear si intentábamos finalizar
+            }
             return
         }
-        // Validaciones básicas (puedes añadir más si es necesario)
+
         if (_state.value.nombreHabitacion.isBlank()) {
             _guardadoState.value = GuardadoState.Error("El nombre de la habitación no puede estar vacío.")
+            if (finalizarDespues) {
+                Log.d(TAG, "Guardado falló (nombre vacío) y era para finalizar. Reseteando preparandoParaFinalizar.")
+                _preparandoParaFinalizar.value = false // Resetear si intentábamos finalizar
+            }
             return
         }
+
         if (_state.value.danoSeleccionado.isEmpty()) {
             _guardadoState.value = GuardadoState.Error("Por favor, seleccione un tipo de daño.")
+            if (finalizarDespues) {
+                Log.d(TAG, "Guardado falló (daño no seleccionado) y era para finalizar. Reseteando preparandoParaFinalizar.")
+                _preparandoParaFinalizar.value = false // Resetear si intentábamos finalizar
+            }
             return
         }
+
         if (_state.value.danoSeleccionado == "otro" && textoOtroDano.value.isBlank()) {
             _guardadoState.value = GuardadoState.Error("Por favor, especifique el tipo de daño 'otro'.")
+            if (finalizarDespues) {
+                Log.d(TAG, "Guardado falló (otro daño vacío) y era para finalizar. Reseteando preparandoParaFinalizar.")
+                _preparandoParaFinalizar.value = false // Resetear si intentábamos finalizar
+            }
             return
         }
 
-
-
-
-
+        // Iniciar corutina para operaciones de base de datos y de red (si las hubiera)
         viewModelScope.launch {
             _guardadoState.value = GuardadoState.Cargando
+            // Si estamos intentando finalizar, _preparandoParaFinalizar ya debería estar true
+            // desde la llamada de 'intentarFinalizarInspeccion'.
+
             val nombreHabitacionActual = _state.value.nombreHabitacion
             try {
                 val listaDeDanos: List<String> = if (state.value.danoSeleccionado == "otro") {
-                    if (textoOtroDano.value.isNotBlank()) {
-                        listOf(textoOtroDano.value) // Lista con el daño "otro"
-                    } else {
-                        emptyList() // O manejar como error si "otro" está seleccionado pero vacío
-                    }
+                    // Si 'otro' está seleccionado pero el texto está vacío, ya lo validamos arriba.
+                    // Aquí asumimos que si es 'otro', textoOtroDano.value tiene contenido.
+                    listOf(textoOtroDano.value)
                 } else {
-                    if (state.value.danoSeleccionado.isNotBlank()) {
-                        listOf(state.value.danoSeleccionado) // Lista con el daño predefinido
-                    } else {
-                        emptyList() // O manejar como error si no se seleccionó daño
-                    }
+                    // Si no es 'otro', y danoSeleccionado no está vacío (validado arriba).
+                    listOf(state.value.danoSeleccionado)
                 }
 
-                // 2. Serializar la lista a JSON
+                // Serializar la lista a JSON
                 val danosJson = GsonUtils.toJson(listaDeDanos)
 
                 val habitacion = HabitacionEntity(
@@ -158,30 +181,41 @@ class NuevaHabitacionViewModel @Inject constructor(
                     alto = _state.value.alto,
                     largo = _state.value.largo,
                     ancho = _state.value.ancho,
-                    danos = danosJson, // Ajusta según cómo serialices
+                    danos = danosJson,
                     fotos = GsonUtils.listToJson(_state.value.fotosTomadas),
                     comentarios = _state.value.comentarios
                 )
+
                 Log.d(TAG, "Guardando habitación: $habitacion")
                 val habitacionId = withContext(Dispatchers.IO) {
                     habitacionRepository.insertHabitacion(habitacion)
                 }
+                Log.d(TAG, "Habitación guardada con ID: $habitacionId")
                 _guardadoState.value = GuardadoState.Exito(habitacionId, nombreHabitacionActual)
 
                 if (finalizarDespues) {
+                    Log.d(TAG, "Habitación guardada como parte de la finalización. Emitiendo FinalizarAhora.")
                     _finalizarInspeccionEvent.emit(FinalizarInspeccionEvent.FinalizarAhora)
+                    // _preparandoParaFinalizar permanece true, ya que la Activity se cerrará.
                 } else {
-                    // Solo preparar para nueva habitación si NO estamos finalizando
+                    // Solo preparar para nueva habitación si NO estamos finalizando la inspección completa.
+                    Log.d(TAG, "Habitación guardada (no para finalizar). Preparando para nueva habitación.")
                     prepararParaNuevaHabitacionLogica()
                 }
 
             } catch (e: Exception) {
                 Log.e(TAG, "ERROR Guardando habitación: ${e.message}", e)
                 _guardadoState.value = GuardadoState.Error(e.message ?: "Error desconocido al guardar")
-                // Si el guardado falla y era para finalizar, el usuario deberá reintentar o presionar terminar de nuevo.
+
+                // ----> LÓGICA CLAVE AÑADIDA AQUÍ <----
+                if (finalizarDespues) {
+                    Log.d(TAG, "Error al guardar durante intento de finalización. Reseteando preparandoParaFinalizar.")
+                    _preparandoParaFinalizar.value = false // Resetear para que la UI no se quede bloqueada
+                }
             }
         }
     }
+
 
     fun intentarFinalizarInspeccion() {
         val currentNombre = _state.value.nombreHabitacion
