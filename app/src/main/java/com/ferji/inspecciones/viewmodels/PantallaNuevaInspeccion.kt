@@ -33,7 +33,7 @@ import com.ferji.inspecciones.viewmodels.NuevaInspeccionViewModel
 fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modifier = Modifier,isLoading: Boolean ) {
     Log.d("PantallaNuevaInsp_UI", "--- PantallaNuevaInspeccion RECOMPONIENDO --- rutInsp: ${viewModel.rutInspector}, isValid: ${viewModel.isRutInspectorValid}")
     val uiState by viewModel.uiState.collectAsState()
-
+ //   val textoOtroDanoActual by viewModel.te.collectAsState()
     Column(
         modifier = modifier
             .fillMaxSize()

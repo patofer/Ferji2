@@ -1,3 +1,5 @@
+// En C:/Proyectos/GITHUB/Jerji/Ferji2/settings.gradle.kts
+
 pluginManagement {
     repositories {
         gradlePluginPortal()
@@ -9,18 +11,11 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        google()
-        mavenCentral()
-
-        // SOLO si necesitas repositorios alternativos, usa HTTPS:
-        maven {
-            url = uri("https://maven.aliyun.com/repository/google")
-        }
-        maven {
-            url = uri("https://maven.aliyun.com/repository/public")
-        }
+        google()       // <- Fuente oficial de librerías de Android/Google
+        mavenCentral() // <- Fuente principal para librerías de Java/Kotlin
+        // Se han eliminado los repositorios de Aliyun que causaban el conflicto.
     }
 }
 
-rootProject.name = "Ferji"
+rootProject.name = "Ferji2" // Corregido de "Ferji" a "Ferji2" para coincidir con el nombre de tu carpeta de proyecto
 include(":app")

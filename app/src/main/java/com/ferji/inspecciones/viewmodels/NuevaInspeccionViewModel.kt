@@ -19,6 +19,8 @@ import com.ferji.inspecciones.data.network.sendgrid.SendGridApiService
 import com.ferji.inspecciones.data.network.sendgrid.SendGridMail
 import com.ferji.inspecciones.data.repository.HabitacionRepository
 import com.ferji.inspecciones.data.repository.InspeccionRepository
+// --- IMPORTACIÓN NUEVA 1 ---
+import com.ferji.inspecciones.data.repository.UserRepository
 import com.ferji.inspecciones.ui.components.PdfGenerationResult
 import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState
 import com.ferji.inspecciones.ui.events.NuevaInspeccionUiEvent
@@ -32,12 +34,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+// --- IMPORTACIÓN NUEVA 2 ---
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-// No necesitas kotlinx.coroutines.delay si no lo usas explícitamente
 
 
 @HiltViewModel
@@ -45,10 +47,12 @@ class NuevaInspeccionViewModel @Inject constructor(
     @ApplicationContext private val applicationContext: Context,
     private val inspeccionRepository: InspeccionRepository,
     private val habitacionRepository: HabitacionRepository,
-    private val sendGridApiService: SendGridApiService
+    private val sendGridApiService: SendGridApiService,
+    // --- DEPENDENCIA NUEVA ---
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(NuevaInspeccionScreenUiState()) // Asegúrate que NuevaInspeccionScreenUiState tenga isLoadingGlobal y isSendingEmail
+    private val _uiState = MutableStateFlow(NuevaInspeccionScreenUiState())
     val uiState: StateFlow<NuevaInspeccionScreenUiState> = _uiState.asStateFlow()
 
     private val _uiEvents = Channel<NuevaInspeccionUiEvent>()
@@ -82,27 +86,33 @@ class NuevaInspeccionViewModel @Inject constructor(
     private var currentInspeccionIdForPdf: Long? = null
     private var currentPdfUriForEmail: Uri? = null
 
-    // Ya no necesitas 'isFinalizingInspection' si usas 'isLoadingGlobal' del _uiState
-    // var isFinalizingInspection by mutableStateOf(false)
-    //    private set
-
 
     init {
-        // Observador para actualizar todosCamposLlenos (tu lógica actual)
+        // --- BLOQUE `init` ACTUALIZADO PARA AUTOCOMPLETAR CAMPOS ---
         viewModelScope.launch {
-            // ...
+            // Usamos .firstOrNull() para obtener el valor actual de la sesión una sola vez
+            val sesionActual = userRepository.getUserSession().firstOrNull()
+            sesionActual?.let { user ->
+                // Asignamos el RUT y el Email del usuario logeado a los campos correspondientes.
+                // Esto automáticamente llamará a las funciones on...Change y validará los campos.
+                user.rut?.let { onRutInspectorChange(it) }
+                user.email?.let { onMailChange(it) }
+                Log.d("NuevaInspVM", "Campos inicializados desde sesión: RUT Inspector=${user.rut}, Email=${user.email}")
+            }
         }
     }
 
-    // --- Funciones de Cambio y Validación de Campos (onRutChange, onSiniestroChange, etc.) ---
-    // (Asumo que estas funciones están correctas y actualizan 'todosCamposLlenos')
+    // (El resto de las funciones no necesita cambios para esta funcionalidad)
+
     private fun actualizarTodosCamposLlenos() {
         val rutNoVacio = rut.isNotBlank()
-        val rutFormatoValido = validarRutChileno(rut)
+        // Llamada correcta a la función de extensión
+        val rutFormatoValido = rut.validarRutChileno()
         val siniestroNoVacio = siniestro.isNotBlank()
         val direccionNoVacia = direccion.isNotBlank()
         val rutInspectorNoVacio = rutInspector.isNotBlank()
-        val rutInspectorFormatoValido = validarRutChileno(rutInspector)
+        // Llamada correcta a la función de extensión
+        val rutInspectorFormatoValido = rutInspector.validarRutChileno()
         val mailNoVacio = mail.isNotBlank()
 
         val condicionesCumplidas = rutNoVacio && rutFormatoValido &&
@@ -118,7 +128,8 @@ class NuevaInspeccionViewModel @Inject constructor(
 
     fun onRutChange(nuevoRut: String) {
         rut = nuevoRut
-        isRutValid = if (nuevoRut.isBlank()) true else validarRutChileno(nuevoRut)
+        // Llamada correcta a la función de extensión
+        isRutValid = if (nuevoRut.isBlank()) true else nuevoRut.validarRutChileno()
         actualizarTodosCamposLlenos()
     }
 
@@ -134,16 +145,17 @@ class NuevaInspeccionViewModel @Inject constructor(
 
     fun onRutInspectorChange(nuevoRutInspector: String) {
         rutInspector = nuevoRutInspector
-        isRutInspectorValid = if (nuevoRutInspector.isBlank()) true else validarRutChileno(nuevoRutInspector)
+        // Llamada correcta a la función de extensión
+        isRutInspectorValid = if (nuevoRutInspector.isBlank()) true else nuevoRutInspector.validarRutChileno()
         actualizarTodosCamposLlenos()
     }
 
     fun onMailChange(nuevoMail: String) {
         mail = nuevoMail
-        isMailValid = esEmailValido(nuevoMail)
+        // Llamada correcta a la función de extensión
+        isMailValid = nuevoMail.esEmailValido()
         actualizarTodosCamposLlenos()
     }
-    // --- Fin Funciones de Cambio ---
 
     fun guardarInspeccion() {
         if (!todosCamposLlenos) {
@@ -172,9 +184,6 @@ class NuevaInspeccionViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Inicia el proceso de finalizar la inspección: genera el PDF y luego procede a enviar el email y navegar.
-     */
     fun finalizarInspeccionYGenerarPdf(inspeccionIdParam: Long? = null) {
         val idDeInspeccionParaPdf = inspeccionIdParam ?: currentInspeccionIdForPdf
         if (idDeInspeccionParaPdf == null) {
@@ -183,10 +192,10 @@ class NuevaInspeccionViewModel @Inject constructor(
             }
             return
         }
-        currentInspeccionIdForPdf = idDeInspeccionParaPdf // Asegurar que está seteado para las siguientes funciones
+        currentInspeccionIdForPdf = idDeInspeccionParaPdf
 
-        viewModelScope.launch { // Corutina principal para todo el proceso de finalización
-            _uiState.update { it.copy(isLoadingGlobal = true) } // Iniciar carga global
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingGlobal = true, isFinalizingAndNavigating = true) }
             _pdfGenerationStatus.value = PdfGenerationResult.InProgress
             Log.d("NuevaInspVM", "finalizarInspeccionYGenerarPdf: isLoadingGlobal = true, generando PDF...")
 
@@ -197,7 +206,7 @@ class NuevaInspeccionViewModel @Inject constructor(
                 if (inspeccion == null) {
                     Log.e("NuevaInspVM", "No se encontró la inspección con ID: $idDeInspeccionParaPdf para generar el PDF.")
                     _pdfGenerationStatus.value = PdfGenerationResult.Error("No se encontró la inspección para el PDF.")
-                    _uiState.update { it.copy(isLoadingGlobal = false) } // Finalizar carga global por error
+                    _uiState.update { it.copy(isLoadingGlobal = false) }
                     return@launch
                 }
 
@@ -218,119 +227,101 @@ class NuevaInspeccionViewModel @Inject constructor(
                     val nombreArchivo = pdfUriParaEmail.lastPathSegment ?: "inspeccion_${inspeccion.id}.pdf"
                     _pdfGenerationStatus.value = PdfGenerationResult.Success(
                         fileName = nombreArchivo,
-                        filePath = pdfCreationResult?.file?.absolutePath, // Puede ser null si se usó MediaStore
+                        filePath = pdfCreationResult?.file?.absolutePath,
                         fileUri = pdfUriParaEmail
                     )
                     currentPdfUriForEmail = pdfUriParaEmail
                     Log.d("NuevaInspVM", "PDF generado exitosamente: $nombreArchivo, URI: $pdfUriParaEmail")
 
-                    // Llamar a proceedToFinalizeAndExit DENTRO de la misma corutina
-                    proceedToFinalizeAndExit() // Esta función ahora es suspend
+                    proceedToFinalizeAndExit()
 
                 } else {
                     Log.e("NuevaInspVM", "PdfGenerator.createPdf devolvió null o no se pudo obtener URI.")
                     _pdfGenerationStatus.value = PdfGenerationResult.Error("No se pudo generar o guardar el PDF.")
-                    _uiState.update { it.copy(isLoadingGlobal = false) } // Finalizar carga global por error
+                    _uiState.update { it.copy(isLoadingGlobal = false,isFinalizingAndNavigating = false) }
                 }
 
             } catch (e: Exception) {
                 Log.e("NuevaInspVM", "Excepción al generar PDF: ${e.message}", e)
                 _pdfGenerationStatus.value = PdfGenerationResult.Error("Error generando PDF: ${e.message}")
-                _uiState.update { it.copy(isLoadingGlobal = false) } // Finalizar carga global por error
+                _uiState.update { it.copy(isLoadingGlobal = false,isFinalizingAndNavigating = false) }
             }
-            // No resetear isLoadingGlobal aquí si proceedToFinalizeAndExit lo va a manejar
         }
     }
 
-    /**
-     * Esta función es llamada DESPUÉS de que el PDF se ha generado exitosamente.
-     * Ahora es SUSPEND y se ejecuta en la misma corutina que finalizarInspeccionYGenerarPdf.
-     */
     private suspend fun proceedToFinalizeAndExit() {
         Log.d("NuevaInspVM", "proceedToFinalizeAndExit: Iniciando proceso de envío de email y navegación...")
-        // isLoadingGlobal ya está true desde finalizarInspeccionYGenerarPdf
 
         val inspeccionId = currentInspeccionIdForPdf
         val pdfUri = currentPdfUriForEmail
-        var emailEnviadoConExito = false // Para el mensaje final
+        var emailEnviadoConExito = false
 
         if (inspeccionId != null && pdfUri != null) {
-            _uiState.update { it.copy(isSendingEmail = true) } // Iniciar carga específica de email
+            _uiState.update { it.copy(isSendingEmail = true) }
             Log.d("NuevaInspVM", "proceedToFinalizeAndExit: isSendingEmail = true, intentando enviar email...")
 
-            // LLAMADA SUSPENDIDA: la corutina esperará aquí
             emailEnviadoConExito = enviarInspeccionPorEmailConSendGrid(inspeccionId, pdfUri)
 
-            _uiState.update { it.copy(isSendingEmail = false) } // Finalizar carga específica de email
+            _uiState.update { it.copy(isSendingEmail = false) }
             Log.d("NuevaInspVM", "proceedToFinalizeAndExit: isSendingEmail = false, resultado del envío: $emailEnviadoConExito")
 
-            if (emailEnviadoConExito) {
-             //   _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("✅ Email enviado correctamente.", isError = false))
-            } else {
-                // El error específico ya debería haberse logueado o enviado como Snackbar desde las funciones internas
+            if (!emailEnviadoConExito) {
                 _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("❌ Falló el envío del email. Revise la conexión o los logs.", isError = true))
             }
         } else {
             Log.w("NuevaInspVM", "proceedToFinalizeAndExit: No hay ID de inspección o URI de PDF para enviar email. Saltando envío.")
             _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("No se pudo preparar el email (faltan datos del PDF).", isError = true))
-            _uiState.update { it.copy(isSendingEmail = false) } // Asegurar que el estado de envío de email esté en false
+            _uiState.update { it.copy(isSendingEmail = false) }
         }
 
         Log.d("NuevaInspVM", "proceedToFinalizeAndExit: Operación de email completada. Enviando NavigateBackToMenu.")
         _uiEvents.send(NuevaInspeccionUiEvent.NavigateBackToMenu)
 
-        // Resetear todos los estados de carga y PDF al final
         _uiState.update { it.copy(isLoadingGlobal = false, isSendingEmail = false, pdfGenerationResult = PdfGenerationResult.Idle) }
-        currentInspeccionIdForPdf = null // Limpiar para la próxima inspección
+        currentInspeccionIdForPdf = null
         currentPdfUriForEmail = null
         Log.d("NuevaInspVM", "proceedToFinalizeAndExit: Estados reseteados, finalizando.")
     }
 
-
-    /**
-     * Prepara y envía la inspección por email usando SendGrid.
-     * Esta función es SUSPEND y realiza el trabajo directamente.
-     */
     private suspend fun enviarInspeccionPorEmailConSendGrid(
-        inspeccionId: Long, // Recibe el ID para obtener la entidad actualizada
+        inspeccionId: Long,
         pdfFileUri: Uri
     ): Boolean {
         Log.d("NuevaInspVM", "enviarInspeccionPorEmailConSendGrid: Iniciando para inspección ID $inspeccionId")
 
-        // Obtener la entidad de inspección actualizada, especialmente si el email pudo haber cambiado
         val inspeccionReal: InspeccionEntity? = try {
             inspeccionRepository.getInspeccionById(inspeccionId)
         } catch (e: Exception) {
             Log.e("NuevaInspVM", "Error al obtener inspección $inspeccionId para email: ${e.message}", e)
             _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error obteniendo datos para el email.", isError = true))
-            return false // Fallo al obtener la inspección
+            return false
         }
 
         if (inspeccionReal == null) {
             Log.e("NuevaInspVM", "No se encontró la inspección $inspeccionId para enviar email.")
             _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error: No se pudo encontrar la inspección para el email.", isError = true))
-            return false // Inspección no encontrada
+            return false
         }
 
         val pdfBase64 = FileUtils.convertUriToBase64(applicationContext, pdfFileUri)
         if (pdfBase64 == null) {
             Log.e("NuevaInspVM", "Error crítico: No se pudo convertir el PDF a Base64 para el email.")
             _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error: No se pudo preparar el PDF para el email.", isError = true))
-            return false // Fallo al procesar el PDF
+            return false
         }
 
-        val destinatarioEmail = inspeccionReal.mail // Usar el email de la entidad recuperada
-        if (destinatarioEmail == null || !esEmailValido(destinatarioEmail)) { // Añadir validación de formato aquí también
+        val destinatarioEmail = inspeccionReal.mail
+        // Llamada correcta a la función de extensión
+        if (destinatarioEmail == null || !destinatarioEmail.esEmailValido()) {
             Log.e("NuevaInspVM", "Error: El email del destinatario ('${destinatarioEmail}') en la inspección ${inspeccionReal.id} es nulo o inválido.")
             _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error: Email del destinatario no es válido o no está especificado.", isError = true))
-            return false // Email de destinatario inválido
+            return false
         }
 
-        // --- Configuración del Email ---
-        val nombreClienteParaEmail = "Cliente Inspección" // Puedes personalizar esto
+        val nombreClienteParaEmail = "Cliente Inspección"
         val toList = listOf(EmailAddress(email = destinatarioEmail, name = nombreClienteParaEmail))
 
-        val ccEmail = "siniestros@ferji.cl" // Email para copia
+        val ccEmail = "patriciofernande@gmail.com"
         val ccName = "Copia Siniestros Ferji"
         val ccList = if (!destinatarioEmail.equals(ccEmail, ignoreCase = true)) {
             listOf(EmailAddress(email = ccEmail, name = ccName))
@@ -340,9 +331,8 @@ class NuevaInspeccionViewModel @Inject constructor(
 
         val personalizations = listOf(Personalization(to = toList, cc = ccList))
 
-        val fromEmailAddress = "patriciofernande@gmail.com" // TU EMAIL VERIFICADO EN SENDGRID
+        val fromEmailAddress = "patriciofernande@gmail.com"
         val fromName = "Equipo Ferji Inspecciones"
-        // Puedes añadir una validación para fromEmailAddress si es dinámica, pero si es constante, asegúrate que sea correcta.
         val fromEmail = EmailAddress(email = fromEmailAddress, name = fromName)
 
         val subject = "Informe Inspección: Siniestro ${inspeccionReal.siniestro ?: "N/A"} - RUT ${inspeccionReal.rut ?: "N/A"}"
@@ -380,18 +370,13 @@ class NuevaInspeccionViewModel @Inject constructor(
         val mailData = SendGridMail(personalizations, fromEmail, subject, contentList, attachmentsList)
 
         Log.d("NuevaInspVM", "Preparado para llamar a la API de SendGrid para la inspección ID ${inspeccionReal.id}.")
-        return llamarASendGridApi(mailData) // Retorna el resultado de la llamada a la API
+        return llamarASendGridApi(mailData)
     }
 
-
-    /**
-     * Llama a la API de SendGrid para enviar el correo.
-     * Esta función es SUSPEND y maneja la lógica de la llamada de red.
-     */
     private suspend fun llamarASendGridApi(mailData: SendGridMail): Boolean {
         Log.d("NuevaInspVM", "llamarASendGridApi: Intentando enviar email...")
         return try {
-            val response = sendGridApiService.sendEmail(mailData) // Asume que es suspend
+            val response = sendGridApiService.sendEmail(mailData)
             if (response.isSuccessful) {
                 Log.i("NuevaInspVM", "Email enviado exitosamente vía API. Código: ${response.code()}")
                 true
@@ -402,7 +387,7 @@ class NuevaInspeccionViewModel @Inject constructor(
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             Log.w("NuevaInspVM", "llamarASendGridApi: Envío cancelado por corutina.", e)
-            throw e // Re-lanzar para que la corutina que llama lo maneje.
+            throw e
         } catch (e: Exception) {
             Log.e("NuevaInspVM", "Excepción al llamar a SendGrid API: ${e.message}", e)
             _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error de red al enviar email: ${e.localizedMessage}", isError = true))
@@ -410,11 +395,10 @@ class NuevaInspeccionViewModel @Inject constructor(
         }
     }
 
-    // `mostrarMensajeGlobal` (si la usas, asegúrate que tu NuevaInspeccionScreenUiState tenga los campos)
     private fun mostrarMensajeGlobal(mensaje: String, esError: Boolean = false) {
         _uiState.update { currentState ->
             currentState.copy(
-                // mensajeGlobalUi = mensaje, // Descomenta si tienes estos campos en tu UiState
+                // mensajeGlobalUi = mensaje,
                 // colorMensajeGlobalUi = if (esError) Color.Red else Color.Green
             )
         }

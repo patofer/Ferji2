@@ -10,19 +10,28 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ferji.inspecciones.data.dao.HabitacionDao
 import com.ferji.inspecciones.data.dao.InspeccionDao
+import com.ferji.inspecciones.data.dao.PartidaDao
+import com.ferji.inspecciones.data.dao.PartidaPrincipalDao
+import com.ferji.inspecciones.data.dao.UserDao
+import com.ferji.inspecciones.data.model.DanoPartidaCrossRef
+import com.ferji.inspecciones.data.model.PartidaEntity
 import com.ferji.inspecciones.data.model.HabitacionEntity // Asegúrate de importar tu entidad Habitación
 import com.ferji.inspecciones.data.model.InspeccionEntity
+import com.ferji.inspecciones.data.model.PartidaPrincipalEntity
+import com.ferji.inspecciones.data.model.UserEntity
 
-//val MIGRATION_1_2 = object : Migration(1, 2) {
-//    override fun migrate(database: SupportSQLiteDatabase) {
-//        // Aquí defines los cambios manualmente si son complejos
-//        // database.execSQL("ALTER TABLE inspeccion ADD COLUMN nueva_columna TEXT")
-//    }
-//}
+
 
 @Database(
-    entities = [InspeccionEntity::class, HabitacionEntity::class],
-    version = 6,
+    entities = [
+        InspeccionEntity::class,
+        HabitacionEntity::class,
+        PartidaEntity::class,       // <-- ENTIDAD AÑADIDA
+        DanoPartidaCrossRef::class ,
+        PartidaPrincipalEntity::class,
+        UserEntity::class
+    ],
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -30,6 +39,9 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun inspeccionDao(): InspeccionDao
     abstract fun habitacionDao(): HabitacionDao
+    abstract fun partidaDao(): PartidaDao
+    abstract fun partidaPrincipalDao(): PartidaPrincipalDao
+    abstract fun userDao(): UserDao
 
     companion object {
         @Volatile

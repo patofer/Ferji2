@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.ferji.inspecciones.data.database.AppDatabase
 import com.ferji.inspecciones.data.dao.HabitacionDao
 import com.ferji.inspecciones.data.dao.InspeccionDao
+import com.ferji.inspecciones.data.dao.PartidaDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -37,5 +38,23 @@ object DatabaseModule {
     @Provides
     fun provideHabitacionDao(database: AppDatabase): HabitacionDao {
         return database.habitacionDao()
+    }
+
+    @Provides
+    @Singleton // Opcional pero recomendado para DAOs
+    fun providePartidaDao(database: AppDatabase): PartidaDao {
+        return database.partidaDao() // <-- Asume que tienes un método así en tu clase AppDatabase
+    }
+
+    @Provides
+    @Singleton // Es buena práctica que los DAOs sean singletons
+    fun providePartidaPrincipalDao(database: AppDatabase): com.ferji.inspecciones.data.dao.PartidaPrincipalDao {
+        return database.partidaPrincipalDao()
+    }
+
+    @Provides
+    @Singleton // Es buena práctica que los DAOs sean singletons
+    fun provideUserDao(database: AppDatabase): com.ferji.inspecciones.data.dao.UserDao {
+        return database.userDao()
     }
 }

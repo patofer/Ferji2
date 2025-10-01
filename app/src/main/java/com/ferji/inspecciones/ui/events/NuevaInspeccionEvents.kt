@@ -20,5 +20,6 @@ data class NuevaInspeccionScreenUiState(
     val isSendingEmail: Boolean = false,
     val isLoadingGlobal: Boolean = false, // Si 'isLoading' y 'isLoadingGlobal' son para cosas distintas, está bien. Si no, consolida.
     val pdfGenerationResult: PdfGenerationResult = PdfGenerationResult.Idle, // Ahora usa ui.common.PdfGenerationResult
+    val isFinalizingAndNavigating: Boolean = false
 )
 

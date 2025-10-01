@@ -65,6 +65,29 @@
             android:exported="false"
             android:theme="@style/Theme.Ferji" />
 
+        <activity
+            android:name=".MantenedorPreciosActivity"
+            android:exported="false"
+            android:label="Mantenedor de precios"
+            android:theme="@style/Theme.Ferji" />
+
+        <activity
+            android:name=".ui.actividades.MaestroPartidasActivity"
+            android:exported="false"
+            android:label="Maestro de Partidas"
+            android:theme="@style/Theme.Ferji" />
+
+        <activity
+        android:name="LoginActivity"
+        android:exported="false"
+        android:label="Login"
+        android:theme="@style/Theme.Ferji" />
+
+        <activity
+            android:name=".PartidaDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Ferji"/>
+
     </application>
 
 </manifest>

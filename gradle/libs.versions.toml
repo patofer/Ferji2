@@ -1,66 +1,89 @@
 [versions]
+# --- Gradle y Plugins ---
 agp = "8.6.0"
 kotlin = "1.9.23"
+ksp = "1.9.23-1.0.19"
+hilt = "2.48.1"
+
+# --- AndroidX Core ---
 coreKtx = "1.12.0"
+lifecycle = "2.6.2"
+activityKtx = "1.9.0"
+
+# --- Jetpack Compose ---
+composeBom = "2024.06.00"
+# --- INICIO DE LA CORRECCIÓN ---
+# Usamos la versión correspondiente a la librería de Material 1 que sí existe.
+materialIconsExtended = "1.6.7"
+# --- FIN DE LA CORRECCIÓN ---
+
+# --- Base de Datos ---
+room = "2.6.1"
+
+# --- Coroutines ---
+coroutines = "1.7.3"
+
+# --- Utilidades y Otras ---
+exifinterface = "1.4.1"
+
+# --- Testing ---
 junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"
-lifecycleRuntimeKtx = "2.6.2"
-activityCompose = "1.8.2"
-composeBom = "2024.06.00"  # ✅ BOM más reciente
-composeCompiler = "1.5.11" # ✅ Compatible con Kotlin 1.9.22
-# Room Database
-ksp = "1.9.23-1.0.19"
-room = "2.6.1"
-adapters = "3.2.0-alpha11"
-hilt = "2.48.1"
-coroutines = "1.7.3"
-lifecycle = "2.6.2"
-lifecycleViewmodelAndroid = "2.9.3"
-foundation = "1.9.2"
-exifinterface = "1.4.1"
+
 
 [libraries]
-androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
-junit = { group = "junit", name = "junit", version.ref = "junit" }
-androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
-androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+# --- Gradle Plugins (definidos en la sección [plugins] de abajo) ---
+androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activityKtx" }
 
-androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+# --- AndroidX Core y Lifecycle ---
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycle" }
+
+# --- Jetpack Compose ---
+# BOM (Bill of Materials) - Gestiona las versiones de las librerías de Compose de abajo
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+# Librerías de Compose (SIN versión, la BOM se encarga)
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose" }
+androidx-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
-androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
-androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
-androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 
-# Room Database
+# --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
+# Corregimos el 'group' a "androidx.compose.material" y el alias.
+androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
+# --- FIN DE LA CORRECCIÓN DEFINITIVA ---
+
+# Herramientas de Previsualización y Testing de UI
+androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+
+# --- Inyección de Dependencias (Hilt) ---
+google-hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+google-hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
+
+# --- Base de Datos (Room) ---
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler-ksp = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 
-
-# Hilt
-google-hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
-google-hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
-androidx-adapters = { group = "androidx.databinding", name = "adapters", version.ref = "adapters" }
-
-# Coroutines
-kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
-
-# Lifecycle
-androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycle" }
-androidx-lifecycle-livedata-ktx = { group = "androidx.lifecycle", name = "lifecycle-livedata-ktx", version.ref = "lifecycle" }
-androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
-androidx-lifecycle-viewmodel-android = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-android", version.ref = "lifecycleViewmodelAndroid" }
-androidx-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
+# --- Otras Librerías y Utilidades ---
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+
+# --- Testing ---
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 
 
 [plugins]
+# --- Plugins de Gradle ---
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+
