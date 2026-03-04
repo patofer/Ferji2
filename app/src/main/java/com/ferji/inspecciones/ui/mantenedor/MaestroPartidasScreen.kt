@@ -100,7 +100,7 @@ fun MaestroPartidasScreen(
             // Actualizamos la función onConfirm para pasar el nuevo dato
             onConfirm = { id, nombre, tipoSuperficie,naturaleza ->
                 // NOTA: Tendrás que actualizar viewModel.guardarPartida para que acepte este nuevo campo
-                viewModel.guardarPartida(id, nombre, tipoSuperficie,naturaleza)
+                viewModel.guardarPartida(id, nombre, tipoSuperficie.name,naturaleza)
                 showDialog = false
             }
         )

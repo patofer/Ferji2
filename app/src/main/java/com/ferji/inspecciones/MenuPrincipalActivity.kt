@@ -22,20 +22,30 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat.startActivity
 import com.ferji.inspecciones.ui.actividades.MaestroPartidasActivity
 import com.ferji.inspecciones.ui.theme.FerjiTheme
+import androidx.activity.viewModels // <-- AÑADE ESTE IMPORT
+import androidx.compose.runtime.collectAsState // <-- AÑADE ESTE IMPORT
+import androidx.compose.runtime.getValue // <-- AÑADE ESTE IMPORT
+import com.ferji.inspecciones.viewmodels.MenuPrincipalViewModel // <-- AÑADE ESTE IMPORT
+import dagger.hilt.android.AndroidEntryPoint
 
 
+@AndroidEntryPoint // <-- 1. AÑADE ESTA ANOTACIÓN
 class MenuPrincipalActivity : ComponentActivity() {
+
+    // 2. Inyecta tu ViewModel usando Hilt
+    private val viewModel: MenuPrincipalViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-
         setContent {
             FerjiTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    PantallaMenuPrincipal()
+                    // 3. Obtiene el estado del ViewModel y pásalo al Composable
+                    val esAdmin by viewModel.esAdministrador.collectAsState()
+                    PantallaMenuPrincipal(esAdministrador = esAdmin)
                 }
             }
         }
@@ -43,8 +53,9 @@ class MenuPrincipalActivity : ComponentActivity() {
 }
 
 @Composable
-fun PantallaMenuPrincipal() {
-    val context = LocalContext.current // ✅ Obtener el contexto
+// 4. El Composable ahora recibe el estado booleano
+fun PantallaMenuPrincipal(esAdministrador: Boolean) {
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -63,133 +74,96 @@ fun PantallaMenuPrincipal() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Botón para nueva inspección
+        // --- MENÚS VISIBLES PARA TODOS LOS ROLES ---
+
         Button(
             onClick = {
                 val intent = Intent(context, NuevaInspeccionActivity::class.java)
                 startActivity(context, intent, null)
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
-            )
+            modifier = Modifier.fillMaxWidth().height(60.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Text(
-                text = "Nueva Inspección",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("Nueva Inspección", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Botón para inspecciones pendientes
         Button(
             onClick = {
                 val intent = Intent(context, ListaInspeccionesActivity::class.java)
                 context.startActivity(intent)
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondary,
-                contentColor = Color.White
-            )
+            modifier = Modifier.fillMaxWidth().height(60.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
         ) {
-            Text(
-                text = "Inspecciones Pendientes",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("Inspecciones Pendientes", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- INICIO DEL NUEVO BOTÓN ---
-        // Botón para el Maestro de Partidas (GESTIONAR partidas)
-        Button(
-            onClick = {
-                // 3. CAMBIAMOS LA ACCIÓN PARA ABRIR LA ACTIVIDAD CORRECTA
-                val intent = Intent(context, MaestroPartidasActivity::class.java)
-                context.startActivity(intent)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF7D5260), // Un color ligeramente diferente para distinguirlo
-                contentColor = Color.White
-            )
-        ) {
-            // 4. USAMOS UN ÍCONO DIFERENTE
-            Icon(Icons.Default.Blinds, contentDescription = "Maestro de Partidas")
-            Spacer(modifier = Modifier.width(8.dp))
-            // 5. CAMBIAMOS EL TEXTO
-            Text(
-                text = "Maestro de Partidas",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        // --- FIN DEL NUEVO BOTÓN ---
+        // --- 5. LÓGICA CONDICIONAL PARA MOSTRAR BOTONES DE ADMINISTRADOR ---
+        if (esAdministrador) {
+            // Botón para el Maestro de Partidas
+            Button(
+                onClick = {
+                    val intent = Intent(context, MaestroPartidasActivity::class.java)
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7D5260))
+            ) {
+                Icon(Icons.Default.Blinds, contentDescription = "Maestro de Partidas")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Maestro de Partidas", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // Botón para el mantenedor de partidas
-        Button(
-            onClick = {
-                val intent = Intent(context, MantenedorPreciosActivity::class.java)
-                context.startActivity(intent)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF625b71), // Un color morado similar al de Material 3
-                contentColor = Color.White
-            )
-        ) {
-            Icon(Icons.Default.Build, contentDescription = "Mantenedor")
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Mantenedor precios",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            // Botón para el mantenedor de precios
+            Button(
+                onClick = {
+                    val intent = Intent(context, MantenedorPreciosActivity::class.java)
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF625b71))
+            ) {
+                Icon(Icons.Default.Build, contentDescription = "Mantenedor")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Mantenedor precios", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-
-
-        // Botón para historial (sin acción por ahora)
+        // --- CONTINUACIÓN DEL MENÚ PARA TODOS ---
         Button(
-            onClick = { /* Aquí irá la acción para ver historial */ },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.tertiary,
-                contentColor = Color.White
-            )
+            onClick = { /* Acción para ver historial */ },
+            modifier = Modifier.fillMaxWidth().height(60.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
         ) {
-            Text(
-                text = "Historial de Inspecciones",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text("Historial de Inspecciones", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+
+// --- 6. ACTUALIZA LAS PREVIEWS PARA PROBAR AMBOS CASOS ---
+
+@Preview(showBackground = true, name = "Vista como Administrador")
 @Composable
-fun PantallaMenuPrincipalPreview() {
+fun PantallaMenuAdminPreview() {
     FerjiTheme {
-        PantallaMenuPrincipal()
+        // Le pasamos 'true' para simular la vista de admin
+        PantallaMenuPrincipal(esAdministrador = true)
+    }
+}
+
+@Preview(showBackground = true, name = "Vista como Usuario Normal")
+@Composable
+fun PantallaMenuUsuarioPreview() {
+    FerjiTheme {
+        // Le pasamos 'false' para simular la vista de un usuario no-admin
+        PantallaMenuPrincipal(esAdministrador = false)
     }
 }

@@ -1,4 +1,3 @@
-// En: com/ferji/inspecciones/ui/mantenedor/DetalleDanoScreen.kt
 package com.ferji.inspecciones.ui.mantenedor
 
 import androidx.compose.foundation.layout.*
@@ -18,62 +17,64 @@ import com.ferji.inspecciones.viewmodels.PartidaViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetalleDanoScreen(
-    claveDano: String,
-    descripcionDano: String,
+    idPadre: Long,
+    descripcionPadre: String,
     viewModel: PartidaViewModel = hiltViewModel(),
     onBack: () -> Unit,
-    onNavigateToMaestro: (String) -> Unit // Pasamos claveDano para volver
+    onNavigateToCrearPartidaHija: (Long) -> Unit
 ) {
-    // Cargar las partidas para este daño específico
-    LaunchedEffect(key1 = claveDano) {
-        viewModel.loadPartidasParaDano(claveDano)
+    // --- INICIO DE LA CORRECCIÓN CLAVE ---
+    // Llamamos a la función PÚBLICA del ViewModel, respetando el encapsulamiento.
+    LaunchedEffect(key1 = idPadre) {
+        viewModel.cargarPartidasDe(idPadre)
     }
+    // --- FIN DE LA CORRECCIÓN CLAVE ---
 
-    val partidasAsociadas by viewModel.partidasAsociadas.collectAsState()
+    val partidasHijas by viewModel.partidasDePrincipal.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(descripcionDano, style = MaterialTheme.typography.titleMedium) },
+                title = { Text(descripcionPadre, style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "Volver")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { onNavigateToMaestro(claveDano) }) {
-                Icon(Icons.Default.Add, contentDescription = "Asociar Partida")
+            FloatingActionButton(onClick = { onNavigateToCrearPartidaHija(idPadre) }) {
+                Icon(Icons.Default.Add, contentDescription = "Añadir Partida Hija")
             }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
             Text(
-                text = "Partidas asociadas:",
+                text = "Partidas Hijas:",
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
-            LazyColumn {
-                items(partidasAsociadas) { partida ->
-                    ListItem(
-                        // CORRECCIÓN 1: Renombrar 'headlineText' a 'headlineContent'
-                        headlineContent = { Text(partida.descripcion) },
-
-                        // CORRECCIÓN 2: Renombrar 'supportingText' a 'supportingContent'
-                        supportingContent = { Text("Precio: $${partida.precioUnitario} / ${partida.unidad}") },
-
-                        // 'trailingContent' ya es correcto
-                        trailingContent = {
-                            IconButton(onClick = { viewModel.desasociarPartidaDeDano(partida.id) }) {
-                                Icon(Icons.Default.Delete, "Desasociar", tint = MaterialTheme.colorScheme.error)
+            if (partidasHijas.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    Text("Aún no hay partidas hijas. Presiona el botón '+' para añadir.")
+                }
+            } else {
+                LazyColumn {
+                    items(partidasHijas) { partida ->
+                        ListItem(
+                            headlineContent = { Text(partida.descripcion) },
+                            supportingContent = { Text("Precio: $${partida.precioUnitario} / ${partida.unidad}") },
+                            trailingContent = {
+                                IconButton(onClick = { viewModel.eliminarPartida(partida) }) {
+                                    Icon(Icons.Default.Delete, "Eliminar", tint = MaterialTheme.colorScheme.error)
+                                }
                             }
-                        }
-                    )
-                    Divider()
+                        )
+                        Divider()
+                    }
                 }
             }
-
         }
     }
 }

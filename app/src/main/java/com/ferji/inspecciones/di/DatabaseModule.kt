@@ -6,6 +6,10 @@ import com.ferji.inspecciones.data.database.AppDatabase
 import com.ferji.inspecciones.data.dao.HabitacionDao
 import com.ferji.inspecciones.data.dao.InspeccionDao
 import com.ferji.inspecciones.data.dao.PartidaDao
+import com.google.firebase.firestore.FirebaseFirestore // <-- 1. IMPORTAR FIREBASE
+import com.google.firebase.firestore.ktx.firestore         // <-- 2. IMPORTAR FIREBASE KTX
+import com.google.firebase.ktx.Firebase                   // <-- 3. IMPORTAR FIREBASE KTX
+import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -56,5 +60,21 @@ object DatabaseModule {
     @Singleton // Es buena práctica que los DAOs sean singletons
     fun provideUserDao(database: AppDatabase): com.ferji.inspecciones.data.dao.UserDao {
         return database.userDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideFirebaseFirestore(): FirebaseFirestore {
+        return Firebase.firestore
+    }
+
+    /**
+     * Provee la instancia única de Gson.
+     * Esto soluciona el error de compilación [Dagger/MissingBinding] para Gson.
+     */
+    @Provides
+    @Singleton
+    fun provideGson(): Gson {
+        return Gson()
     }
 }

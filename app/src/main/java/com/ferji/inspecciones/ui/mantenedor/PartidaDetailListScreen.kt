@@ -10,32 +10,28 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ferji.inspecciones.data.model.PartidaEntity
-// --- INICIO CAMBIO 1: AÑADIR IMPORTS ---
 import com.ferji.inspecciones.data.model.UnidadMedida
-// --- FIN CAMBIO 1 ---
-import com.ferji.inspecciones.viewmodels.PartidaDetailViewModel
+import com.ferji.inspecciones.viewmodels.PartidaViewModel
 
-/**
- * Pantalla para GESTIONAR (CRUD) las Partidas de Detalle para una Partida Principal.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PartidaDetailListScreen(
     partidaPrincipalId: Long,
     partidaPrincipalNombre: String,
-    viewModel: PartidaDetailViewModel = hiltViewModel(),
+    viewModel: PartidaViewModel = hiltViewModel(),
     onBack: () -> Unit
 ) {
     LaunchedEffect(partidaPrincipalId) {
-        viewModel.loadPartidasDeDetalle(partidaPrincipalId)
+        viewModel.cargarPartidasDe(partidaPrincipalId)
     }
 
-    val partidasDeDetalle by viewModel.partidasDeDetalle.collectAsState()
+    val partidasHijas by viewModel.partidasDePrincipal.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
     var partidaAEditar by remember { mutableStateOf<PartidaEntity?>(null) }
 
@@ -55,34 +51,37 @@ fun PartidaDetailListScreen(
                 partidaAEditar = null
                 showDialog = true
             }) {
-                Icon(Icons.Default.Add, contentDescription = "Añadir Partida de Detalle")
+                Icon(Icons.Default.Add, contentDescription = "Añadir Partida")
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-        ) {
-            items(partidasDeDetalle, key = { it.id }) { partida ->
-                ListItem(
-                    headlineContent = { Text(partida.descripcion) },
-                    supportingContent = { Text("Unidad: ${partida.unidad} | Precio: ${partida.precioUnitario}") },
-                    trailingContent = {
-                        Row {
-                            IconButton(onClick = {
-                                partidaAEditar = partida
-                                showDialog = true
-                            }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Editar")
-                            }
-                            IconButton(onClick = { viewModel.eliminarPartidaDetalle(partida) }) {
-                                Icon(Icons.Default.Delete, "Eliminar", tint = MaterialTheme.colorScheme.error)
+        if (partidasHijas.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text("Aún no hay partidas. Presiona el botón '+' para añadir.")
+            }
+        } else {
+            // --- LA CORRECCIÓN CLAVE ESTÁ AQUÍ ---
+            LazyColumn(contentPadding = padding) {
+                items(partidasHijas, key = { it.id }) { partida ->
+                    ListItem(
+                        headlineContent = { Text(partida.descripcion) },
+                        supportingContent = { Text("Precio: $${partida.precioUnitario} / ${partida.unidad}") },
+                        trailingContent = {
+                            Row {
+                                IconButton(onClick = {
+                                    partidaAEditar = partida
+                                    showDialog = true
+                                }) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Editar")
+                                }
+                                IconButton(onClick = { viewModel.eliminarPartida(partida) }) {
+                                    Icon(Icons.Default.Delete, "Eliminar", tint = MaterialTheme.colorScheme.error)
+                                }
                             }
                         }
-                    }
-                )
-                Divider()
+                    )
+                    Divider()
+                }
             }
         }
     }
@@ -92,7 +91,13 @@ fun PartidaDetailListScreen(
             partida = partidaAEditar,
             onDismiss = { showDialog = false },
             onConfirm = { id, descripcion, unidad, precio ->
-                viewModel.guardarPartidaDetalle(id, descripcion, unidad, precio)
+                viewModel.crearOActualizarPartida(
+                    id = id,
+                    descripcion = descripcion,
+                    unidad = UnidadMedida.valueOf(unidad),
+                    precio = precio,
+                    partidaPrincipalId = partidaPrincipalId
+                )
                 showDialog = false
             }
         )
@@ -100,30 +105,17 @@ fun PartidaDetailListScreen(
 }
 
 
-/**
- * Diálogo reutilizable para crear o editar una Partida de Detalle, ahora con Dropdown para la unidad.
- */
-@OptIn(ExperimentalMaterial3Api::class) // Necesario para ExposedDropdownMenuBox
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PartidaDetalleEditDialog(
     partida: PartidaEntity?,
     onDismiss: () -> Unit,
     onConfirm: (id: Long?, descripcion: String, unidad: String, precio: Double) -> Unit
 ) {
-    // --- INICIO CAMBIO 2: ESTADOS ADAPTADOS PARA EL DROPDOWN ---
     var descripcion by remember(partida) { mutableStateOf(partida?.descripcion ?: "") }
     var precio by remember(partida) { mutableStateOf(partida?.precioUnitario?.toString() ?: "") }
-
-    // Estado para la unidad de medida, ahora de tipo `UnidadMedida?`
-    var selectedUnidad by remember(partida) {
-        // Intenta encontrar el enum que coincida con el string de la partida, o null si no hay partida/no coincide.
-        mutableStateOf(
-            UnidadMedida.values().find { it.name == partida?.unidad }
-        )
-    }
-    // Estado para controlar la expansión del dropdown
+    var selectedUnidad by remember(partida) { mutableStateOf(UnidadMedida.values().find { it.name == partida?.unidad }) }
     var isDropdownExpanded by remember { mutableStateOf(false) }
-    // --- FIN CAMBIO 2 ---
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -137,23 +129,19 @@ private fun PartidaDetalleEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // --- INICIO CAMBIO 3: REEMPLAZO DEL TEXTFIELD POR DROPDOWN ---
                 ExposedDropdownMenuBox(
                     expanded = isDropdownExpanded,
                     onExpandedChange = { isDropdownExpanded = it },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(), // Ancla el menú a este campo
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
                         readOnly = true,
-                        value = selectedUnidad?.descripcion ?: "Seleccione una unidad", // Muestra descripción o placeholder
-                        onValueChange = {}, // Vacío porque es de solo lectura
+                        value = selectedUnidad?.descripcion ?: "Seleccione una unidad",
+                        onValueChange = {},
                         label = { Text("Unidad de Medida") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded) }
                     )
-
                     ExposedDropdownMenu(
                         expanded = isDropdownExpanded,
                         onDismissRequest = { isDropdownExpanded = false }
@@ -169,7 +157,6 @@ private fun PartidaDetalleEditDialog(
                         }
                     }
                 }
-                // --- FIN CAMBIO 3 ---
 
                 OutlinedTextField(
                     value = precio,
@@ -181,15 +168,16 @@ private fun PartidaDetalleEditDialog(
             }
         },
         confirmButton = {
-            Button(onClick = {
-                val precioDouble = precio.toDoubleOrNull()
-                // --- INICIO CAMBIO 4: VALIDACIÓN Y LLAMADA A onConfirm ---
-                val unidadString = selectedUnidad?.name // Obtiene "M2", "ML", etc.
-                if (descripcion.isNotBlank() && unidadString != null && precioDouble != null) {
-                    onConfirm(partida?.id, descripcion, unidadString, precioDouble)
-                }
-                // --- FIN CAMBIO 4 ---
-            }) { Text("Guardar") }
+            Button(
+                onClick = {
+                    val precioDouble = precio.toDoubleOrNull()
+                    val unidadString = selectedUnidad?.name
+                    if (descripcion.isNotBlank() && unidadString != null && precioDouble != null) {
+                        onConfirm(partida?.id, descripcion, unidadString, precioDouble)
+                    }
+                },
+                enabled = descripcion.isNotBlank() && selectedUnidad != null && precio.toDoubleOrNull() != null
+            ) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )

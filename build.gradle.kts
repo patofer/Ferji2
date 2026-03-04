@@ -5,5 +5,6 @@ plugins {
     alias(libs.plugins.kotlin.ksp) apply false // ASEGÚRATE DE TENER ESTA LÍNEA
     alias(libs.plugins.hilt.android) apply false // También puedes declarar Hilt aquí
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.23" apply false
+    id ("com.google.gms.google-services") version "4.4.2" apply false
 
 }

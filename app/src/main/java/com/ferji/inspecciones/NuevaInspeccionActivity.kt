@@ -178,7 +178,11 @@ class NuevaInspeccionActivity : ComponentActivity() {
                                 finish()
                             }
                             is NuevaInspeccionUiEvent.RequestEmailWithPdf -> {
-                                // Esta lógica se mantiene
+                                // Evento legacy, no se usa actualmente
+                            }
+                            is NuevaInspeccionUiEvent.SendEmailNativo -> {
+                                // El envío de email ahora es automático desde EmailService.
+                                // Este evento ya no requiere acción en la Activity.
                             }
                         }
                     }

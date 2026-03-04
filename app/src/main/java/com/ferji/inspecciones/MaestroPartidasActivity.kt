@@ -1,30 +1,38 @@
 package com.ferji.inspecciones.ui.actividades
-// O el paquete donde la tengas, ej: com.ferji.inspecciones
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.ui.platform.LocalContext // <-- Añadir esta importación
-import com.ferji.inspecciones.PartidaDetailActivity // <-- Añadir esta importación
-import com.ferji.inspecciones.ui.mantenedor.MaestroPartidasScreen // <- Usa la pantalla de gestión CRUD
+import androidx.activity.viewModels
+import androidx.compose.ui.platform.LocalContext
+import com.ferji.inspecciones.PartidaDetailActivity
+import com.ferji.inspecciones.ui.mantenedor.MaestroPartidasScreen
 import com.ferji.inspecciones.ui.theme.FerjiTheme
+import com.ferji.inspecciones.viewmodels.PartidaPrincipalViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MaestroPartidasActivity : ComponentActivity() {
+
+    // La declaración del ViewModel aquí está bien.
+    private val viewModel: PartidaPrincipalViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // ✅ 1. ¡CORRECCIÓN CLAVE! super.onCreate() DEBE ser la primera línea.
         super.onCreate(savedInstanceState)
+
+        // ✅ 2. Llama a la sincronización DESPUÉS de super.onCreate().
+        viewModel.sincronizarDatos()
+
+        // ✅ 3. Configura el contenido de la UI al final.
         setContent {
             FerjiTheme {
-                // Obtenemos el contexto actual para poder lanzar la nueva actividad
                 val context = LocalContext.current
 
-                // Llama directamente a la pantalla de gestión. No se necesita NavGraph aquí.
+                // Pasa la instancia del ViewModel que ya fue inicializada de forma segura.
                 MaestroPartidasScreen(
-                    onBack = { finish() } , // El botón de volver simplemente cierra la actividad.
-
-                    // --- ¡AQUÍ ESTÁ LA SOLUCIÓN! ---
-                    // Ahora, al hacer clic, creamos y lanzamos el Intent.
+                    viewModel = viewModel,
+                    onBack = { finish() },
                     onPartidaClick = { partidaId, partidaNombre ->
                         val intent = PartidaDetailActivity.newIntent(
                             context = context,

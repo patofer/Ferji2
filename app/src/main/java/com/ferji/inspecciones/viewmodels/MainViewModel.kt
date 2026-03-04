@@ -27,12 +27,11 @@ class MainViewModel @Inject constructor(
     init {
         // En cuanto el ViewModel se crea, se suscribe a los cambios de la sesión
         viewModelScope.launch {
-            userRepository.getUserSession().collect { sessionData ->
-                // Si el RUT guardado está vacío o es nulo, el usuario no está logueado
+            // ✅ CORRECCIÓN: Usamos la propiedad 'currentUserSession' en lugar de la función 'getUserSession()'
+            userRepository.currentUserSession.collect { sessionData ->
                 if (sessionData.rut.isNullOrBlank()) {
                     _sessionState.value = SessionState.LoggedOut
                 } else {
-                    // Si hay datos, el usuario está logueado
                     _sessionState.value = SessionState.LoggedIn(sessionData)
                 }
             }

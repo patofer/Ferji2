@@ -45,4 +45,28 @@ interface PartidaDao {
     // --- AÑADIR ESTE MÉTODO ---
     @Query("SELECT * FROM partidas WHERE partida_principal_id = :partidaPrincipalId")
     fun getPartidasByPrincipalId(partidaPrincipalId: Long): Flow<List<PartidaEntity>>
+
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(partidas: List<PartidaEntity>) // <-- AÑADIR
+
+    @Query("DELETE FROM partidas")
+    suspend fun deleteAll() // <-- AÑADIR
+
+
+    @Query("SELECT * FROM partidas WHERE firebaseId = :firebaseId LIMIT 1")
+    suspend fun getByFirebaseId(firebaseId: String): PartidaEntity?
+
+    @Upsert
+    suspend fun upsert(partida: PartidaEntity)
+
+    @Query("SELECT * FROM partidas WHERE sincronizadoConFirebase = 0")
+    suspend fun getNoSincronizadas(): List<PartidaEntity>
+
+
+    @Query("SELECT * FROM partidas WHERE partida_principal_id = :idPadre")
+    fun getPartidasDePrincipal(idPadre: Long): Flow<List<PartidaEntity>>
+
+    @Query("SELECT * FROM partidas WHERE eliminado = 1")
+    suspend fun getEliminadas(): List<PartidaEntity>
 }

@@ -1,47 +1,62 @@
 // En: com/ferji/inspecciones/viewmodels/PartidaViewModel.kt
 package com.ferji.inspecciones.viewmodels
 
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ferji.inspecciones.data.model.DanoPartidaCrossRef
+import androidx.work.*
 import com.ferji.inspecciones.data.model.PartidaEntity
 import com.ferji.inspecciones.data.model.UnidadMedida
 import com.ferji.inspecciones.data.repository.PartidaRepository
+import com.ferji.inspecciones.data.workers.DeleteWorker
+import com.ferji.inspecciones.data.workers.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class PartidaViewModel @Inject constructor(private val repository: PartidaRepository) : ViewModel() {
+class PartidaViewModel @Inject constructor(
+    private val repository: PartidaRepository,
+    @ApplicationContext private val appContext: Context
+) : ViewModel() {
 
-    // ... (resto de tus propiedades sin cambios) ...
+    private val _idPartidaPrincipal = MutableStateFlow(0L)
 
-    val _partidasMaestro = MutableStateFlow<List<PartidaEntity>>(emptyList())
-    val partidasMaestro: StateFlow<List<PartidaEntity>> = _partidasMaestro.asStateFlow()
-
-    val _partidasAsociadas = MutableStateFlow<List<PartidaEntity>>(emptyList())
-    val partidasAsociadas: StateFlow<List<PartidaEntity>> = _partidasAsociadas.asStateFlow()
-
-    private var claveDanoActual: String? = null
-
-    init {
-        viewModelScope.launch {
-            repository.getAllPartidas().collect {
-                _partidasMaestro.value = it
+    /**
+     * Un Flow que emite la lista de partidas hijas para la partida principal actualmente seleccionada.
+     * Se actualiza automáticamente cada vez que la base de datos cambia y filtra los elementos
+     * marcados para eliminación para que no se muestren en la UI.
+     */
+    val partidasDePrincipal: StateFlow<List<PartidaEntity>> = _idPartidaPrincipal
+        .flatMapLatest { idPadre ->
+            if (idPadre > 0) {
+                repository.getPartidasDePrincipal(idPadre)
+                    .map { list -> list.filter { !it.eliminado } } // Filtra los eliminados
+            } else {
+                flowOf(emptyList<PartidaEntity>())
             }
         }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    /**
+     * Función PÚBLICA para que la UI le diga al ViewModel qué partida principal observar.
+     * Esto actualiza el valor del StateFlow privado, lo que reactiva el Flow 'partidasDePrincipal'.
+     */
+    fun cargarPartidasDe(idPadre: Long) {
+        _idPartidaPrincipal.value = idPadre
     }
 
-    fun loadPartidasParaDano(claveDano: String) {
-        this.claveDanoActual = claveDano
-        viewModelScope.launch {
-            repository.getPartidasForDano(claveDano).collect {
-                _partidasAsociadas.value = it
-            }
-        }
-    }
-
+    /**
+     * Crea una nueva partida hija localmente y programa un trabajo con WorkManager para subirla.
+     */
     fun crearOActualizarPartida(
         id: Long?,
         descripcion: String,
@@ -50,45 +65,102 @@ class PartidaViewModel @Inject constructor(private val repository: PartidaReposi
         partidaPrincipalId: Long?
     ) {
         if (partidaPrincipalId == null || descripcion.isBlank()) {
+            Log.e("PartidaVM", "Faltan datos para crear/actualizar la partida.")
             return
         }
 
-        viewModelScope.launch {
-            // --- INICIO DE LA CORRECCIÓN ---
-            // Se convierte el enum 'unidad' a su representación en String usando '.name'
-            val partida = PartidaEntity(
-                id = id ?: 0,
-                descripcion = descripcion,
-                unidad = unidad.name, // ¡Corrección aplicada aquí!
-                precioUnitario = precio,
-                partidaPrincipalId = partidaPrincipalId
-            )
-            // --- FIN DE LA CORRECCIÓN ---
+        viewModelScope.launch(Dispatchers.IO) {
+            val esNuevo = (id == null || id == 0L)
+
+            // --- INICIO DE LA CORRECCIÓN CLAVE ---
+            val partida = if (esNuevo) {
+                // SI ES NUEVO: No especificamos el ID. Dejamos que Room lo autogenere.
+                PartidaEntity(
+                    descripcion = descripcion,
+                    unidad = unidad.name,
+                    precioUnitario = precio,
+                    partidaPrincipalId = partidaPrincipalId,
+                    sincronizadoConFirebase = false, // Es nuevo, necesita subirse
+                    eliminado = false
+                )
+            } else {
+                // SI ES UNA EDICIÓN: Usamos el ID que nos pasaron.
+                PartidaEntity(
+                    id = id!!,
+                    descripcion = descripcion,
+                    unidad = unidad.name,
+                    precioUnitario = precio,
+                    partidaPrincipalId = partidaPrincipalId,
+                    // Aquí podrías añadir lógica para marcarlo como no sincronizado si se edita,
+                    // pero por ahora lo dejamos así para no complicarlo.
+                    sincronizadoConFirebase = true,
+                    eliminado = false
+                )
+            }
+            // --- FIN DE LA CORRECCIÓN CLAVE ---
+
             repository.upsertPartida(partida)
+            Log.d("PartidaVM", "Partida guardada localmente: $partida")
+
+            if (esNuevo) {
+                programarTrabajoDeSubida()
+            }
         }
     }
 
+
+    /**
+     * Marca una partida para ser eliminada y programa un trabajo con WorkManager para que la borre
+     * de Firebase y de la base de datos local.
+     */
     fun eliminarPartida(partida: PartidaEntity) {
-        viewModelScope.launch {
-            repository.deletePartida(partida)
+        viewModelScope.launch(Dispatchers.IO) {
+            // 1. Marcar la entidad como 'eliminado = true' para que desaparezca de la UI al instante.
+            repository.upsertPartida(partida.copy(eliminado = true))
+            Log.d("PartidaVM", "Marcando para eliminación la partida: ${partida.id}")
+
+            // 2. Programar el trabajo de eliminación en segundo plano.
+            programarTrabajoDeEliminacion()
         }
     }
 
-    fun asociarPartidaADano(partidaId: Long) {
-        val claveDano = claveDanoActual ?: return
-        viewModelScope.launch {
-            repository.addDanoPartidaCrossRef(
-                DanoPartidaCrossRef(claveDano = claveDano, partidaId = partidaId)
-            )
-        }
+    /**
+     * Configura y pone en cola un trabajo único para subir los cambios a Firebase.
+     */
+    private fun programarTrabajoDeSubida() {
+        Log.d("PartidaVM", "Programando trabajo de subida con WorkManager.")
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val uploadWorkRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(appContext).enqueueUniqueWork(
+            SyncWorker.WORK_NAME,
+            ExistingWorkPolicy.KEEP, // Si ya hay un trabajo de subida, no crea otro
+            uploadWorkRequest
+        )
     }
 
-    fun desasociarPartidaDeDano(partidaId: Long) {
-        val claveDano = claveDanoActual ?: return
-        viewModelScope.launch {
-            repository.removeDanoPartidaCrossRef(
-                DanoPartidaCrossRef(claveDano = claveDano, partidaId = partidaId)
-            )
-        }
+    /**
+     * Configura y pone en cola un trabajo único para limpiar los registros eliminados.
+     */
+    private fun programarTrabajoDeEliminacion() {
+        Log.d("PartidaVM", "Programando trabajo de eliminación con WorkManager.")
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val deleteWorkRequest = OneTimeWorkRequestBuilder<DeleteWorker>()
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(appContext).enqueueUniqueWork(
+            DeleteWorker.WORK_NAME,
+            ExistingWorkPolicy.KEEP, // Si ya hay un trabajo de limpieza, no crea otro
+            deleteWorkRequest
+        )
     }
 }

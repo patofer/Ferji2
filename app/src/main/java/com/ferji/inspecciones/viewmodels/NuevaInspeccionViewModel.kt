@@ -11,20 +11,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ferji.inspecciones.data.model.HabitacionEntity
 import com.ferji.inspecciones.data.model.InspeccionEntity
-import com.ferji.inspecciones.data.network.sendgrid.Attachment
-import com.ferji.inspecciones.data.network.sendgrid.Content
-import com.ferji.inspecciones.data.network.sendgrid.EmailAddress
-import com.ferji.inspecciones.data.network.sendgrid.Personalization
-import com.ferji.inspecciones.data.network.sendgrid.SendGridApiService
-import com.ferji.inspecciones.data.network.sendgrid.SendGridMail
 import com.ferji.inspecciones.data.repository.HabitacionRepository
 import com.ferji.inspecciones.data.repository.InspeccionRepository
-// --- IMPORTACIÓN NUEVA 1 ---
 import com.ferji.inspecciones.data.repository.UserRepository
 import com.ferji.inspecciones.ui.components.PdfGenerationResult
 import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState
 import com.ferji.inspecciones.ui.events.NuevaInspeccionUiEvent
-import com.ferji.inspecciones.utils.FileUtils
+import com.ferji.inspecciones.utils.email.EmailService
 import com.ferji.inspecciones.utils.PdfGenerator
 import com.ferji.inspecciones.utils.esEmailValido
 import com.ferji.inspecciones.utils.validarRutChileno
@@ -34,7 +27,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-// --- IMPORTACIÓN NUEVA 2 ---
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -47,8 +39,7 @@ class NuevaInspeccionViewModel @Inject constructor(
     @ApplicationContext private val applicationContext: Context,
     private val inspeccionRepository: InspeccionRepository,
     private val habitacionRepository: HabitacionRepository,
-    private val sendGridApiService: SendGridApiService,
-    // --- DEPENDENCIA NUEVA ---
+    private val emailService: EmailService,
     private val userRepository: UserRepository
 ) : ViewModel() {
 
@@ -90,8 +81,8 @@ class NuevaInspeccionViewModel @Inject constructor(
     init {
         // --- BLOQUE `init` ACTUALIZADO PARA AUTOCOMPLETAR CAMPOS ---
         viewModelScope.launch {
-            // Usamos .firstOrNull() para obtener el valor actual de la sesión una sola vez
-            val sesionActual = userRepository.getUserSession().firstOrNull()
+            // ✅ CORRECCIÓN: Usamos la propiedad 'currentUserSession' en lugar de la función 'getUserSession()'
+            val sesionActual = userRepository.currentUserSession.firstOrNull()
             sesionActual?.let { user ->
                 // Asignamos el RUT y el Email del usuario logeado a los campos correspondientes.
                 // Esto automáticamente llamará a las funciones on...Change y validará los campos.
@@ -254,20 +245,17 @@ class NuevaInspeccionViewModel @Inject constructor(
 
         val inspeccionId = currentInspeccionIdForPdf
         val pdfUri = currentPdfUriForEmail
-        var emailEnviadoConExito = false
 
         if (inspeccionId != null && pdfUri != null) {
             _uiState.update { it.copy(isSendingEmail = true) }
             Log.d("NuevaInspVM", "proceedToFinalizeAndExit: isSendingEmail = true, intentando enviar email...")
 
-            emailEnviadoConExito = enviarInspeccionPorEmailConSendGrid(inspeccionId, pdfUri)
+            // Enviar email usando el cliente nativo del dispositivo
+            prepararYEnviarEmailNativo(inspeccionId, pdfUri)
 
             _uiState.update { it.copy(isSendingEmail = false) }
-            Log.d("NuevaInspVM", "proceedToFinalizeAndExit: isSendingEmail = false, resultado del envío: $emailEnviadoConExito")
+            Log.d("NuevaInspVM", "proceedToFinalizeAndExit: isSendingEmail = false")
 
-            if (!emailEnviadoConExito) {
-                _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("❌ Falló el envío del email. Revise la conexión o los logs.", isError = true))
-            }
         } else {
             Log.w("NuevaInspVM", "proceedToFinalizeAndExit: No hay ID de inspección o URI de PDF para enviar email. Saltando envío.")
             _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("No se pudo preparar el email (faltan datos del PDF).", isError = true))
@@ -283,124 +271,74 @@ class NuevaInspeccionViewModel @Inject constructor(
         Log.d("NuevaInspVM", "proceedToFinalizeAndExit: Estados reseteados, finalizando.")
     }
 
-    private suspend fun enviarInspeccionPorEmailConSendGrid(
-        inspeccionId: Long,
-        pdfFileUri: Uri
-    ): Boolean {
-        Log.d("NuevaInspVM", "enviarInspeccionPorEmailConSendGrid: Iniciando para inspección ID $inspeccionId")
-
-        val inspeccionReal: InspeccionEntity? = try {
+    /**
+     * Envía el email de forma **automática y silenciosa** usando SendGrid (sin abrir ninguna app).
+     * Construye el HTML del cuerpo, convierte el PDF a Base64 y llama a la API directamente.
+     */
+    private suspend fun prepararYEnviarEmailNativo(inspeccionId: Long, pdfUri: Uri) {
+        val inspeccion: InspeccionEntity? = try {
             inspeccionRepository.getInspeccionById(inspeccionId)
         } catch (e: Exception) {
             Log.e("NuevaInspVM", "Error al obtener inspección $inspeccionId para email: ${e.message}", e)
             _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error obteniendo datos para el email.", isError = true))
-            return false
-        }
-
-        if (inspeccionReal == null) {
-            Log.e("NuevaInspVM", "No se encontró la inspección $inspeccionId para enviar email.")
-            _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error: No se pudo encontrar la inspección para el email.", isError = true))
-            return false
-        }
-
-        val pdfBase64 = FileUtils.convertUriToBase64(applicationContext, pdfFileUri)
-        if (pdfBase64 == null) {
-            Log.e("NuevaInspVM", "Error crítico: No se pudo convertir el PDF a Base64 para el email.")
-            _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error: No se pudo preparar el PDF para el email.", isError = true))
-            return false
-        }
-
-        val destinatarioEmail = inspeccionReal.mail
-        // Llamada correcta a la función de extensión
-        if (destinatarioEmail == null || !destinatarioEmail.esEmailValido()) {
-            Log.e("NuevaInspVM", "Error: El email del destinatario ('${destinatarioEmail}') en la inspección ${inspeccionReal.id} es nulo o inválido.")
-            _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error: Email del destinatario no es válido o no está especificado.", isError = true))
-            return false
-        }
-
-        val nombreClienteParaEmail = "Cliente Inspección"
-        val toList = listOf(EmailAddress(email = destinatarioEmail, name = nombreClienteParaEmail))
-
-        val ccEmail = "patriciofernande@gmail.com"
-        val ccName = "Copia Siniestros Ferji"
-        val ccList = if (!destinatarioEmail.equals(ccEmail, ignoreCase = true)) {
-            listOf(EmailAddress(email = ccEmail, name = ccName))
-        } else {
             null
         }
 
-        val personalizations = listOf(Personalization(to = toList, cc = ccList))
+        if (inspeccion == null) {
+            Log.e("NuevaInspVM", "No se encontró la inspección $inspeccionId para enviar email.")
+            _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error: No se pudo encontrar la inspección para el email.", isError = true))
+            return
+        }
 
-        val fromEmailAddress = "patriciofernande@gmail.com"
-        val fromName = "Equipo Ferji Inspecciones"
-        val fromEmail = EmailAddress(email = fromEmailAddress, name = fromName)
+        val destinatario = inspeccion.mail
+        if (!destinatario.esEmailValido()) {
+            Log.e("NuevaInspVM", "Email del destinatario inválido: $destinatario")
+            _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Email del destinatario inválido: $destinatario", isError = true))
+            return
+        }
 
-        val subject = "Informe Inspección: Siniestro ${inspeccionReal.siniestro ?: "N/A"} - RUT ${inspeccionReal.rut ?: "N/A"}"
+        val asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}"
+        val nombrePdf = "Inspeccion_${inspeccion.siniestro}_${inspeccion.rut}.pdf"
 
-        val emailBody = """
-        Estimado/a ${nombreClienteParaEmail},
-
-        Adjunto encontrará el informe de la inspección realizada para el siniestro N° ${inspeccionReal.siniestro ?: "No especificado"}.
-
-        Detalles de la Inspección:
-        - RUT Cliente: ${inspeccionReal.rut ?: "No especificado"}
-        - Dirección: ${inspeccionReal.direccion ?: "No especificada"}
-        - Inspector Asignado: ${inspeccionReal.rutInspector ?: "No especificado"}
-        
-        Si tiene alguna consulta, no dude en contactarnos.
-
-        Saludos cordiales,
-        El Equipo de Ferji Inspecciones
+        val cuerpoHtml = """
+            <html><body>
+            <p>Estimado/a,</p>
+            <p>Adjunto encontrará el informe de la inspección realizada para el
+            <strong>siniestro N° ${inspeccion.siniestro}</strong>.</p>
+            <table border="1" cellpadding="6" cellspacing="0">
+                <tr><th>RUT Cliente</th><td>${inspeccion.rut}</td></tr>
+                <tr><th>Dirección</th><td>${inspeccion.direccion}</td></tr>
+                <tr><th>Inspector Asignado</th><td>${inspeccion.rutInspector}</td></tr>
+            </table>
+            <br/>
+            <p>Si tiene alguna consulta, no dude en contactarnos.</p>
+            <p>Saludos cordiales,<br/><strong>Equipo Ferji Inspecciones</strong></p>
+            </body></html>
         """.trimIndent()
 
-        val contentList = listOf(Content(type = "text/plain", value = emailBody))
+        val cc = listOf("patriciofernande@gmail.com")
+            .filterNot { it.equals(destinatario, ignoreCase = true) }
+            .ifEmpty { null }
 
-        val siniestroSanitizado = inspeccionReal.siniestro?.replace(Regex("[^a-zA-Z0-9._-]"), "_") ?: inspeccionReal.id.toString()
-        val nombreArchivoPdf = "Informe_Inspeccion_$siniestroSanitizado.pdf"
-
-        val attachmentsList = listOf(
-            Attachment(
-                content = pdfBase64,
-                filename = nombreArchivoPdf,
-                type = "application/pdf",
-                disposition = "attachment"
-            )
+        Log.d("NuevaInspVM", "Enviando email automático a: $destinatario")
+        val resultado = emailService.enviarConPdf(
+            destinatarios = listOf(destinatario),
+            cc = cc,
+            asunto = asunto,
+            cuerpoHtml = cuerpoHtml,
+            pdfUri = pdfUri,
+            nombreArchivoAdjunto = nombrePdf
         )
 
-        val mailData = SendGridMail(personalizations, fromEmail, subject, contentList, attachmentsList)
-
-        Log.d("NuevaInspVM", "Preparado para llamar a la API de SendGrid para la inspección ID ${inspeccionReal.id}.")
-        return llamarASendGridApi(mailData)
-    }
-
-    private suspend fun llamarASendGridApi(mailData: SendGridMail): Boolean {
-        Log.d("NuevaInspVM", "llamarASendGridApi: Intentando enviar email...")
-        return try {
-            val response = sendGridApiService.sendEmail(mailData)
-            if (response.isSuccessful) {
-                Log.i("NuevaInspVM", "Email enviado exitosamente vía API. Código: ${response.code()}")
-                true
-            } else {
-                val errorBody = response.errorBody()?.string() ?: "Cuerpo del error no disponible"
-                Log.e("NuevaInspVM", "Error SendGrid API. Código: ${response.code()}, Msg: ${response.message()}, Cuerpo: $errorBody")
-                false
+        when (resultado) {
+            is EmailService.EmailResult.Success -> {
+                Log.i("NuevaInspVM", "Email enviado correctamente a $destinatario")
+                _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Informe enviado correctamente a $destinatario"))
             }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            Log.w("NuevaInspVM", "llamarASendGridApi: Envío cancelado por corutina.", e)
-            throw e
-        } catch (e: Exception) {
-            Log.e("NuevaInspVM", "Excepción al llamar a SendGrid API: ${e.message}", e)
-            _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error de red al enviar email: ${e.localizedMessage}", isError = true))
-            false
-        }
-    }
-
-    private fun mostrarMensajeGlobal(mensaje: String, esError: Boolean = false) {
-        _uiState.update { currentState ->
-            currentState.copy(
-                // mensajeGlobalUi = mensaje,
-                // colorMensajeGlobalUi = if (esError) Color.Red else Color.Green
-            )
+            is EmailService.EmailResult.Error -> {
+                Log.e("NuevaInspVM", "Error enviando email: ${resultado.message}")
+                _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error al enviar email: ${resultado.message}", isError = true))
+            }
         }
     }
 }

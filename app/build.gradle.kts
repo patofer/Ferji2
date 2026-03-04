@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.hilt.android)
     kotlin("plugin.serialization") version "1.9.23"
+    id("com.google.gms.google-services")
 }
 
 val localProperties = Properties()
@@ -28,17 +29,29 @@ android {
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ksp {
-            arg("room.schemaLocation", "$projectDir/schemas")
-            arg("room.incremental", "true")
-            arg("room.expandProjection", "true")
-        }
+
 
         buildConfigField(
             "String",
             "SENDGRID_API_KEY",
             "\"" + localProperties.getProperty("SENDGRID_API_KEY", "") + "\""
         )
+        buildConfigField(
+            "String",
+            "SMTP_USER",
+            "\"" + localProperties.getProperty("SMTP_USER", "") + "\""
+        )
+        buildConfigField(
+            "String",
+            "SMTP_PASSWORD",
+            "\"" + localProperties.getProperty("SMTP_PASSWORD", "") + "\""
+        )
+    }
+
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+        arg("room.incremental", "true")
+        arg("room.expandProjection", "true")
     }
 
     buildTypes {
@@ -67,6 +80,16 @@ android {
     // Reintroducimos este bloque para forzar la versión correcta del compilador.
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.11"
+    }
+
+    packaging {
+        resources {
+            excludes += "META-INF/LICENSE.md"
+            excludes += "META-INF/LICENSE-notice.md"
+            excludes += "META-INF/NOTICE.md"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/LICENSE"
+        }
     }
 }
 
@@ -127,9 +150,20 @@ dependencies {
     implementation("com.itextpdf:io:7.2.5")
     implementation("org.slf4j:slf4j-nop:1.7.32")
 
+    implementation(platform("com.google.firebase:firebase-bom:33.1.1"))
+
+    // Dependencia para Firestore
+    implementation ("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
 
     // ---- Jetpack DataStore (para gestionar la sesión) ----
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    implementation("org.dhatim:fastexcel:0.18.3")
+
+    // ---- JavaMail para Android (envío automático de email via SMTP) ----
+    implementation("com.sun.mail:android-mail:1.6.7")
+    implementation("com.sun.mail:android-activation:1.6.7")
 
     // ---- Testing ----
     testImplementation(libs.junit)

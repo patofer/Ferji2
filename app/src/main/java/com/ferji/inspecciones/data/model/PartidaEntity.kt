@@ -2,49 +2,61 @@ package com.ferji.inspecciones.data.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
-import androidx.room.ForeignKey // <-- 1. IMPORTAR ForeignKey
-import androidx.room.PrimaryKey
+import androidx.room.ForeignKey
 import androidx.room.Index
-
-// El enum no cambia
-
+import androidx.room.PrimaryKey
+import com.google.firebase.firestore.Exclude
+import com.google.firebase.firestore.IgnoreExtraProperties
+import com.google.firebase.firestore.PropertyName
 
 @Entity(
     tableName = "partidas",
     indices = [
         Index(value = ["codigo"], unique = false),
-        Index(value = ["partida_principal_id"]) // <-- 2. AÑADIR ÍNDICE PARA LA CLAVE FORÁNEA
+        Index(value = ["partida_principal_id"]),
+        Index(value = ["firebaseId"], unique = true)
     ],
-    // --- INICIO DE LA CORRECCIÓN ---
     foreignKeys = [
         ForeignKey(
-            entity = PartidaPrincipalEntity::class, // La tabla padre
-            parentColumns = ["id"],                 // La columna de la clave primaria en el padre
-            childColumns = ["partida_principal_id"],// La columna de la clave foránea en esta tabla
-            onDelete = ForeignKey.CASCADE           // ¡IMPORTANTE! Si se borra una PartidaPrincipal, se borran todas sus PartidaEntity hijas.
+            entity = PartidaPrincipalEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["partida_principal_id"],
+            onDelete = ForeignKey.CASCADE
         )
     ]
-    // --- FIN DE LA CORRECCIÓN ---
 )
+@IgnoreExtraProperties
 data class PartidaEntity(
     @PrimaryKey(autoGenerate = true)
     @ColumnInfo(name = "id")
-    val id: Long = 0,
+    val id: Long = 0L,
 
-    // --- INICIO DE LA CORRECCIÓN ---
-    @ColumnInfo(name = "partida_principal_id") // 3. AÑADIR LA COLUMNA DE LA CLAVE FORÁNEA
-    val partidaPrincipalId: Long,
-    // --- FIN DE LA CORRECCIÓN ---
+    @get:PropertyName("partida_principal_id")
+    @set:PropertyName("partida_principal_id")
+    @ColumnInfo(name = "partida_principal_id")
+    var partidaPrincipalId: Long = 0L,
 
     @ColumnInfo(name = "descripcion")
-    val descripcion: String,
+    val descripcion: String = "",
 
     @ColumnInfo(name = "unidad")
-    val unidad: String,
+    val unidad: String = "",
 
+    @get:PropertyName("precio_unitario")
+    @set:PropertyName("precio_unitario")
     @ColumnInfo(name = "precio_unitario")
-    val precioUnitario: Double,
+    var precioUnitario: Double = 0.0,
 
     @ColumnInfo(name = "codigo")
-    val codigo: String? = null
+    val codigo: String? = null,
+
+    val firebaseId: String = "",
+
+    // ✅ --- LA CORRECCIÓN MÁS IMPORTANTE --- ✅
+    // Una nueva entidad, por defecto, NO está sincronizada.
+    @get:Exclude
+    val sincronizadoConFirebase: Boolean = false,
+
+    @get:Exclude
+    val eliminado: Boolean = false
 )

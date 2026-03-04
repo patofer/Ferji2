@@ -11,6 +11,14 @@ sealed interface NuevaInspeccionUiEvent {
     object NavigateBackToMenu : NuevaInspeccionUiEvent
     data class ShowSnackbar(val message: String, val isError: Boolean = false) : NuevaInspeccionUiEvent
     data class RequestEmailWithPdf(val inspeccionId: Long, val pdfUri: Uri) : NuevaInspeccionUiEvent
+    /** Evento para que la Activity lance el cliente de email nativo con el PDF adjunto. */
+    data class SendEmailNativo(
+        val destinatarios: List<String>,
+        val cc: List<String>?,
+        val asunto: String,
+        val cuerpo: String,
+        val pdfUri: Uri
+    ) : NuevaInspeccionUiEvent
 }
 
 data class NuevaInspeccionScreenUiState(

@@ -16,7 +16,7 @@ data class AdminUser(val rut: String, val nombre: String, val email: String)
 
 class UserRepository @Inject constructor(
     private val sessionManager: SessionManager,
-    private val userDao: UserDao // <-- 1. Inyecta el DAO de usuario
+    private val userDao: UserDao
 ) {
     // La lista de administradores sigue siendo necesaria para asignar el rol
     private val adminUsers: List<AdminUser> = listOf(
@@ -24,7 +24,18 @@ class UserRepository @Inject constructor(
         AdminUser("123456789", "Otro Admin", "otro.admin@email.com")
     )
 
-    fun getUserSession(): Flow<UserSession> = sessionManager.userSessionFlow
+    // ✅ --- INICIO DE LA SOLUCIÓN --- ✅
+    /**
+     * Propiedad PÚBLICA que expone un Flow con la sesión del usuario actual.
+     * Es la "única fuente de verdad" sobre el estado de la sesión para el resto de la app.
+     * Los ViewModels observarán este Flow.
+     */
+    val currentUserSession: Flow<UserSession> = sessionManager.userSessionFlow
+    // ✅ --- FIN DE LA SOLUCIÓN --- ✅
+
+
+    // La función 'getUserSession()' ya no es necesaria, ya que ahora tenemos la propiedad pública.
+    // fun getUserSession(): Flow<UserSession> = sessionManager.userSessionFlow
 
     suspend fun login(rut: String, nombre: String, email: String) {
         // Asigna el rol basado en la lista de administradores
@@ -33,11 +44,10 @@ class UserRepository @Inject constructor(
         // Guarda la sesión actual
         sessionManager.saveUserSession(rut, nombre, email, userRole)
 
-        // <-- 2. GUARDA O ACTUALIZA AL USUARIO EN LA BASE DE DATOS
-        userDao.saveUser(UserEntity(rut = rut, nombre = nombre, email = email))
+        // GUARDA O ACTUALIZA AL USUARIO EN LA BASE DE DATOS LOCAL
+        userDao.saveUser(UserEntity(rut = rut, nombre = nombre, email = email, rol = userRole))
     }
 
-    // <-- 3. NUEVA FUNCIÓN PARA BUSCAR EN LA BASE DE DATOS
     suspend fun findUserInDatabase(rut: String): UserEntity? {
         return userDao.findUserByRut(rut)
     }
