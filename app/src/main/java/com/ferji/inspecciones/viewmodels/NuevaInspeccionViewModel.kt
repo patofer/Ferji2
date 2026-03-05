@@ -13,11 +13,13 @@ import com.ferji.inspecciones.data.model.HabitacionEntity
 import com.ferji.inspecciones.data.model.InspeccionEntity
 import com.ferji.inspecciones.data.repository.HabitacionRepository
 import com.ferji.inspecciones.data.repository.InspeccionRepository
+import com.ferji.inspecciones.data.repository.PartidaRepository
 import com.ferji.inspecciones.data.repository.UserRepository
 import com.ferji.inspecciones.ui.components.PdfGenerationResult
 import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState
 import com.ferji.inspecciones.ui.events.NuevaInspeccionUiEvent
 import com.ferji.inspecciones.utils.email.EmailService
+import com.ferji.inspecciones.utils.ExcelGenerator
 import com.ferji.inspecciones.utils.PdfGenerator
 import com.ferji.inspecciones.utils.esEmailValido
 import com.ferji.inspecciones.utils.validarRutChileno
@@ -39,6 +41,7 @@ class NuevaInspeccionViewModel @Inject constructor(
     @ApplicationContext private val applicationContext: Context,
     private val inspeccionRepository: InspeccionRepository,
     private val habitacionRepository: HabitacionRepository,
+    private val partidaRepository: PartidaRepository,
     private val emailService: EmailService,
     private val userRepository: UserRepository
 ) : ViewModel() {
@@ -202,7 +205,7 @@ class NuevaInspeccionViewModel @Inject constructor(
                 }
 
                 Log.d("NuevaInspVM", "Intentando generar PDF para inspección ID: ${inspeccion.id} con ${habitaciones.size} habitaciones.")
-                val pdfCreationResult = PdfGenerator.createPdf(applicationContext, inspeccion, habitaciones)
+                val pdfCreationResult = PdfGenerator.createPdf(applicationContext, inspeccion, habitaciones, partidaRepository)
 
                 val pdfUriParaEmail: Uri? = when {
                     pdfCreationResult?.uri != null -> pdfCreationResult.uri
@@ -272,8 +275,8 @@ class NuevaInspeccionViewModel @Inject constructor(
     }
 
     /**
-     * Envía el email de forma **automática y silenciosa** usando SendGrid (sin abrir ninguna app).
-     * Construye el HTML del cuerpo, convierte el PDF a Base64 y llama a la API directamente.
+     * Genera el presupuesto Excel, y envía el email con PDF + Excel adjuntos
+     * de forma automática y silenciosa via SMTP.
      */
     private suspend fun prepararYEnviarEmailNativo(inspeccionId: Long, pdfUri: Uri) {
         val inspeccion: InspeccionEntity? = try {
@@ -297,20 +300,56 @@ class NuevaInspeccionViewModel @Inject constructor(
             return
         }
 
-        val asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}"
+        // --- Generar el presupuesto Excel ---
+        val habitaciones = habitacionRepository.getHabitacionesPorInspeccionId(inspeccionId)
+        val excelGenerator = ExcelGenerator(applicationContext)
+        val excelResult = excelGenerator.generarPresupuesto(inspeccion, habitaciones, partidaRepository)
+
+        // --- Preparar los adjuntos ---
+        val adjuntos = mutableListOf<EmailService.Adjunto>()
+
+        // Adjunto 1: PDF del informe
         val nombrePdf = "Inspeccion_${inspeccion.siniestro}_${inspeccion.rut}.pdf"
+        adjuntos.add(
+            EmailService.Adjunto(
+                uri = pdfUri,
+                nombreArchivo = nombrePdf,
+                mimeType = "application/pdf"
+            )
+        )
+
+        // Adjunto 2: Excel del presupuesto (si se generó correctamente)
+        if (excelResult?.uri != null) {
+            adjuntos.add(
+                EmailService.Adjunto(
+                    uri = excelResult.uri,
+                    nombreArchivo = excelResult.fileName,
+                    mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            )
+            Log.d("NuevaInspVM", "Excel generado: ${excelResult.fileName}")
+        } else {
+            Log.w("NuevaInspVM", "No se pudo generar el presupuesto Excel. Se enviará solo el PDF.")
+        }
+
+        val asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}"
 
         val cuerpoHtml = """
             <html><body>
             <p>Estimado/a,</p>
-            <p>Adjunto encontrará el informe de la inspección realizada para el
-            <strong>siniestro N° ${inspeccion.siniestro}</strong>.</p>
+            <p>Adjunto encontrará el informe de la inspección y el presupuesto de reparación
+            para el <strong>siniestro N° ${inspeccion.siniestro}</strong>.</p>
             <table border="1" cellpadding="6" cellspacing="0">
                 <tr><th>RUT Cliente</th><td>${inspeccion.rut}</td></tr>
                 <tr><th>Dirección</th><td>${inspeccion.direccion}</td></tr>
                 <tr><th>Inspector Asignado</th><td>${inspeccion.rutInspector}</td></tr>
             </table>
             <br/>
+            <p><strong>Documentos adjuntos:</strong></p>
+            <ul>
+                <li>Informe de Inspección (PDF)</li>
+                ${if (excelResult?.uri != null) "<li>Presupuesto de Reparación (Excel)</li>" else ""}
+            </ul>
             <p>Si tiene alguna consulta, no dude en contactarnos.</p>
             <p>Saludos cordiales,<br/><strong>Equipo Ferji Inspecciones</strong></p>
             </body></html>
@@ -320,20 +359,19 @@ class NuevaInspeccionViewModel @Inject constructor(
             .filterNot { it.equals(destinatario, ignoreCase = true) }
             .ifEmpty { null }
 
-        Log.d("NuevaInspVM", "Enviando email automático a: $destinatario")
-        val resultado = emailService.enviarConPdf(
+        Log.d("NuevaInspVM", "Enviando email a: $destinatario con ${adjuntos.size} adjuntos")
+        val resultado = emailService.enviarConAdjuntos(
             destinatarios = listOf(destinatario),
             cc = cc,
             asunto = asunto,
             cuerpoHtml = cuerpoHtml,
-            pdfUri = pdfUri,
-            nombreArchivoAdjunto = nombrePdf
+            adjuntos = adjuntos
         )
 
         when (resultado) {
             is EmailService.EmailResult.Success -> {
                 Log.i("NuevaInspVM", "Email enviado correctamente a $destinatario")
-                _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Informe enviado correctamente a $destinatario"))
+                _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Informe y presupuesto enviados a $destinatario"))
             }
             is EmailService.EmailResult.Error -> {
                 Log.e("NuevaInspVM", "Error enviando email: ${resultado.message}")

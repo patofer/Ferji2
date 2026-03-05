@@ -48,18 +48,32 @@ class PartidaPrincipalViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             if (nombre.isNotBlank()) {
                 val esNuevo = id == null
+
+                // Si es edición, obtener el firebaseId existente
+                val firebaseIdExistente = if (!esNuevo) {
+                    repository.getPartidaPrincipalById(id!!)?.firebaseId ?: ""
+                } else ""
+
                 val partida = PartidaPrincipalEntity(
                     id = id ?: 0,
                     nombre = nombre,
                     tipoSuperficie = tipoSuperficie,
                     naturaleza = naturaleza,
-                    sincronizadoConFirebase = !esNuevo // Se marca para subir si es nuevo
+                    firebaseId = firebaseIdExistente,
+                    sincronizadoConFirebase = false // Marcar para subir
                 )
                 repository.upsertPartidaPrincipal(partida)
-                Log.d("PartidaPrincipalVM", "Partida principal guardada localmente: $partida")
+                Log.d("PartidaPrincipalVM", "Guardada localmente: '${partida.nombre}' naturaleza=${partida.naturaleza}")
 
-                // Si es un elemento nuevo, se programa la subida.
-                if (esNuevo) {
+                // Subir inmediatamente a Firebase y resincronizar
+                try {
+                    repository.subirTodosLosCambios()
+                    Log.d("PartidaPrincipalVM", "Subida a Firebase completada. Resincronizando...")
+                    repository.sincronizarCatalogoCompleto()
+                    Log.d("PartidaPrincipalVM", "Resincronización desde Firebase completada.")
+                } catch (e: Exception) {
+                    Log.e("PartidaPrincipalVM", "Error al sincronizar con Firebase: ${e.message}", e)
+                    // Programar worker como fallback
                     programarTrabajoDeSubida()
                 }
             }

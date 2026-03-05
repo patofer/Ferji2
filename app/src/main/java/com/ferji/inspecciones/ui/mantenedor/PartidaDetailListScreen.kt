@@ -61,7 +61,10 @@ fun PartidaDetailListScreen(
             }
         } else {
             // --- LA CORRECCIÓN CLAVE ESTÁ AQUÍ ---
-            LazyColumn(contentPadding = padding) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(bottom = 80.dp) // Espacio extra para que el FAB no tape los últimos ítems
+            ) {
                 items(partidasHijas, key = { it.id }) { partida ->
                     ListItem(
                         headlineContent = { Text(partida.descripcion) },

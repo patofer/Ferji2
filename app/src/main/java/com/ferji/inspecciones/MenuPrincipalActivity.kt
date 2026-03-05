@@ -4,11 +4,11 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.ExperimentalFoundationApi // <-- 1. AÑADE ESTE IMPORT
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Blinds
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,10 +22,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat.startActivity
 import com.ferji.inspecciones.ui.actividades.MaestroPartidasActivity
 import com.ferji.inspecciones.ui.theme.FerjiTheme
-import androidx.activity.viewModels // <-- AÑADE ESTE IMPORT
-import androidx.compose.runtime.collectAsState // <-- AÑADE ESTE IMPORT
-import androidx.compose.runtime.getValue // <-- AÑADE ESTE IMPORT
-import com.ferji.inspecciones.viewmodels.MenuPrincipalViewModel // <-- AÑADE ESTE IMPORT
+import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.ferji.inspecciones.viewmodels.MenuPrincipalViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 
@@ -43,7 +43,6 @@ class MenuPrincipalActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // 3. Obtiene el estado del ViewModel y pásalo al Composable
                     val esAdmin by viewModel.esAdministrador.collectAsState()
                     PantallaMenuPrincipal(esAdministrador = esAdmin)
                 }
@@ -53,9 +52,9 @@ class MenuPrincipalActivity : ComponentActivity() {
 }
 
 @Composable
-// 4. El Composable ahora recibe el estado booleano
 fun PantallaMenuPrincipal(esAdministrador: Boolean) {
     val context = LocalContext.current
+
 
     Column(
         modifier = Modifier
@@ -137,6 +136,23 @@ fun PantallaMenuPrincipal(esAdministrador: Boolean) {
         }
 
         // --- CONTINUACIÓN DEL MENÚ PARA TODOS ---
+
+        // Botón para reenviar inspecciones (PDF + Presupuesto)
+        Button(
+            onClick = {
+                val intent = Intent(context, ReenvioInspeccionesActivity::class.java)
+                context.startActivity(intent)
+            },
+            modifier = Modifier.fillMaxWidth().height(60.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE67E22))
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar")
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Enviar Inspección", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Button(
             onClick = { /* Acción para ver historial */ },
             modifier = Modifier.fillMaxWidth().height(60.dp),

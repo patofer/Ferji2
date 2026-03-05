@@ -98,5 +98,48 @@ class SendGridEmailService @Inject constructor(
             null
         }
     }
+
+    override suspend fun enviarConAdjuntos(
+        destinatarios: List<String>,
+        cc: List<String>?,
+        asunto: String,
+        cuerpoHtml: String,
+        adjuntos: List<EmailService.Adjunto>
+    ): EmailService.EmailResult {
+        return try {
+            val attachments = adjuntos.mapNotNull { adjunto ->
+                val base64 = leerUriComoBase64(adjunto.uri) ?: return@mapNotNull null
+                Attachment(
+                    content = base64,
+                    filename = adjunto.nombreArchivo,
+                    type = adjunto.mimeType,
+                    disposition = "attachment"
+                )
+            }
+
+            val mail = SendGridMail(
+                personalizations = listOf(
+                    Personalization(
+                        to = destinatarios.map { EmailAddress(email = it) },
+                        cc = cc?.map { EmailAddress(email = it) }?.ifEmpty { null }
+                    )
+                ),
+                from = EmailAddress(email = REMITENTE_EMAIL, name = REMITENTE_NOMBRE),
+                subject = asunto,
+                content = listOf(Content(type = "text/html", value = cuerpoHtml)),
+                attachments = attachments.ifEmpty { null }
+            )
+
+            val response = sendGridApiService.sendEmail(mail)
+            if (response.isSuccessful) {
+                EmailService.EmailResult.Success
+            } else {
+                val errorBody = response.errorBody()?.string() ?: "Sin detalle"
+                EmailService.EmailResult.Error("Error del servidor (${response.code()}): $errorBody")
+            }
+        } catch (e: Exception) {
+            EmailService.EmailResult.Error("Error inesperado: ${e.message}", e)
+        }
+    }
 }
 

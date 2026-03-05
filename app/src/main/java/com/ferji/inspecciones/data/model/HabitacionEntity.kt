@@ -31,7 +31,7 @@ data class HabitacionEntity(
     val nombre: String,
 
     @ColumnInfo(name = "alto")
-    val alto: Int, // Asumiendo que se guardan como enteros (ej. en cm o mm)
+    val alto: Int, // Se guardan como enteros en centímetros (ej: 380 = 3.80 metros)
 
     @ColumnInfo(name = "largo")
     val largo: Int,

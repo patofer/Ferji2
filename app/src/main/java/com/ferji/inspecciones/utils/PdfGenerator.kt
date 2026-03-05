@@ -14,9 +14,11 @@ import androidx.exifinterface.media.ExifInterface
 import com.ferji.inspecciones.R
 import com.ferji.inspecciones.data.model.HabitacionEntity
 import com.ferji.inspecciones.data.model.InspeccionEntity
+import com.ferji.inspecciones.data.repository.PartidaRepository
 import com.itextpdf.io.font.constants.StandardFonts
 import com.itextpdf.io.image.ImageDataFactory
 import com.itextpdf.kernel.colors.ColorConstants
+import com.itextpdf.kernel.colors.DeviceRgb
 import com.itextpdf.kernel.events.Event
 import com.itextpdf.kernel.events.IEventHandler
 import com.itextpdf.kernel.events.PdfDocumentEvent
@@ -43,6 +45,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,10 +59,11 @@ object PdfGenerator {
         val fileName: String
     )
 
-    fun createPdf(
+    suspend fun createPdf(
         context: Context,
         inspeccion: InspeccionEntity,
-        habitaciones: List<HabitacionEntity>
+        habitaciones: List<HabitacionEntity>,
+        partidaRepository: PartidaRepository? = null
     ): PdfCreationResult? {
         var outputStream: OutputStream? = null
         var fileUri: Uri? = null
@@ -286,6 +290,26 @@ object PdfGenerator {
                 document.add(Paragraph("No se registraron habitaciones.").setFont(regularFont).setItalic())
             }
 
+            // ═══════════════════════════════════════════════════════════════
+            //  SECCIÓN DE PRESUPUESTO DETALLADO
+            // ═══════════════════════════════════════════════════════════════
+            if (partidaRepository != null && habitaciones.isNotEmpty()) {
+                try {
+                    val excelGenerator = ExcelGenerator(context)
+                    val presupuesto = excelGenerator.recopilarDatos(habitaciones, partidaRepository)
+
+                    if (presupuesto.habitaciones.isNotEmpty() || presupuesto.lineasFijasGlobales.isNotEmpty()) {
+                        addPresupuestoDetallado(document, presupuesto, titleFont, regularFont)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error al generar sección de presupuesto en PDF: ${e.message}", e)
+                    document.add(
+                        Paragraph("Error al generar el detalle del presupuesto.")
+                            .setFont(regularFont).setFontSize(10f).setItalic()
+                    )
+                }
+            }
+
             document.close()
             Log.i(TAG, "PDF generado: $finalFileName. Uri: $fileUri, Path: ${legacyFile?.absolutePath}")
             return PdfCreationResult(legacyFile, fileUri, finalFileName)
@@ -301,6 +325,179 @@ object PdfGenerator {
             try { outputStream?.close() }
             catch (e: Exception) { Log.e(TAG, "Error cerrando outputStream: ${e.message}") }
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  PRESUPUESTO DETALLADO EN PDF
+    // ═══════════════════════════════════════════════════════════════
+
+    private val nf: NumberFormat = NumberFormat.getIntegerInstance(Locale("es", "CL")).apply {
+        isGroupingUsed = true
+    }
+
+    private fun formatMonto(valor: Double): String = "$${nf.format(valor.toLong())}"
+
+    private fun redondear2(valor: Double): Double = (valor * 100.0).toLong() / 100.0
+
+    // Colores para el presupuesto
+    private val COLOR_HEADER_HAB = DeviceRgb(41, 128, 185)       // Azul oscuro
+    private val COLOR_HEADER_PARTIDAS = DeviceRgb(52, 73, 94)    // Gris oscuro
+    private val COLOR_FILA_PAR = DeviceRgb(245, 245, 245)        // Gris muy claro
+    private val COLOR_TOTAL_HAB = DeviceRgb(39, 174, 96)         // Verde
+    private val COLOR_TOTAL_GENERAL = DeviceRgb(192, 57, 43)     // Rojo oscuro
+    private val COLOR_GENERALES = DeviceRgb(142, 68, 173)        // Morado
+
+    private fun addPresupuestoDetallado(
+        document: Document,
+        presupuesto: ExcelGenerator.PresupuestoCompleto,
+        titleFont: PdfFont,
+        regularFont: PdfFont
+    ) {
+        document.add(com.itextpdf.layout.element.AreaBreak())
+
+        document.add(
+            Paragraph("PRESUPUESTO DETALLADO DE REPARACIÓN")
+                .setFont(titleFont).setFontSize(16f).setTextAlignment(TextAlignment.CENTER)
+                .setMarginTop(10f).setMarginBottom(20f)
+        )
+
+        // ══════════════════════════════════════════
+        //  HABITACIONES (solo partidas variables)
+        // ══════════════════════════════════════════
+        for (hab in presupuesto.habitaciones) {
+            // Encabezado de habitación
+            val habHeaderTable = Table(UnitValue.createPercentArray(floatArrayOf(4f, 1f, 1f, 1f))).useAllAvailableWidth()
+            habHeaderTable.addCell(
+                Cell().add(Paragraph(hab.nombre.uppercase()).setFont(titleFont).setFontSize(11f).setFontColor(ColorConstants.WHITE))
+                    .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
+            )
+            habHeaderTable.addCell(
+                Cell().add(Paragraph("Alto: ${String.format(Locale.getDefault(), "%.2f", hab.altoCm / 100.0)}")
+                    .setFont(regularFont).setFontSize(8f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.CENTER))
+                    .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
+            )
+            habHeaderTable.addCell(
+                Cell().add(Paragraph("Ancho: ${String.format(Locale.getDefault(), "%.2f", hab.anchoCm / 100.0)}")
+                    .setFont(regularFont).setFontSize(8f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.CENTER))
+                    .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
+            )
+            habHeaderTable.addCell(
+                Cell().add(Paragraph("Largo: ${String.format(Locale.getDefault(), "%.2f", hab.largoCm / 100.0)}")
+                    .setFont(regularFont).setFontSize(8f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.CENTER))
+                    .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
+            )
+            document.add(habHeaderTable)
+
+            // Tabla de partidas variables
+            if (hab.lineasVariables.isNotEmpty()) {
+                val partidasTable = Table(UnitValue.createPercentArray(floatArrayOf(5f, 1.2f, 1.2f, 1.5f, 1.5f))).useAllAvailableWidth()
+                partidasTable.addCell(createPresupuestoHeaderCell("Descripción", titleFont))
+                partidasTable.addCell(createPresupuestoHeaderCell("Medida", titleFont))
+                partidasTable.addCell(createPresupuestoHeaderCell("Cantidad", titleFont))
+                partidasTable.addCell(createPresupuestoHeaderCell("P. Unitario", titleFont))
+                partidasTable.addCell(createPresupuestoHeaderCell("P. Total", titleFont))
+
+                hab.lineasVariables.forEachIndexed { index, linea ->
+                    addLineaPartida(partidasTable, linea, index, regularFont)
+                }
+
+                // Total habitación
+                partidasTable.addCell(
+                    Cell(1, 4).add(Paragraph("TOTAL ${hab.nombre.uppercase()}")
+                        .setFont(titleFont).setFontSize(9f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.RIGHT))
+                        .setBackgroundColor(COLOR_TOTAL_HAB).setPadding(5f).setBorder(null)
+                )
+                partidasTable.addCell(
+                    Cell().add(Paragraph(formatMonto(hab.totalHabitacion))
+                        .setFont(titleFont).setFontSize(9f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.RIGHT))
+                        .setBackgroundColor(COLOR_TOTAL_HAB).setPadding(5f).setBorder(null)
+                )
+                document.add(partidasTable)
+            } else {
+                document.add(Paragraph("  Sin partidas asociadas.").setFont(regularFont).setFontSize(9f).setItalic().setMarginBottom(5f))
+            }
+
+            document.add(Paragraph("").setMarginBottom(12f))
+        }
+
+        // ══════════════════════════════════════════
+        //  GENERALES (gastos fijos)
+        // ══════════════════════════════════════════
+        if (presupuesto.lineasFijasGlobales.isNotEmpty()) {
+            val generalesHeaderTable = Table(UnitValue.createPercentArray(floatArrayOf(1f))).useAllAvailableWidth()
+            generalesHeaderTable.addCell(
+                Cell().add(Paragraph("GENERALES")
+                    .setFont(titleFont).setFontSize(11f).setFontColor(ColorConstants.WHITE))
+                    .setBackgroundColor(COLOR_GENERALES).setPadding(6f).setBorder(null)
+            )
+            document.add(generalesHeaderTable)
+
+            val generalesTable = Table(UnitValue.createPercentArray(floatArrayOf(5f, 1.2f, 1.2f, 1.5f, 1.5f))).useAllAvailableWidth()
+            generalesTable.addCell(createPresupuestoHeaderCell("Descripción", titleFont))
+            generalesTable.addCell(createPresupuestoHeaderCell("Medida", titleFont))
+            generalesTable.addCell(createPresupuestoHeaderCell("Cantidad", titleFont))
+            generalesTable.addCell(createPresupuestoHeaderCell("P. Unitario", titleFont))
+            generalesTable.addCell(createPresupuestoHeaderCell("P. Total", titleFont))
+
+            presupuesto.lineasFijasGlobales.forEachIndexed { index, linea ->
+                addLineaPartida(generalesTable, linea, index, regularFont)
+            }
+
+            // Subtotal generales
+            generalesTable.addCell(
+                Cell(1, 4).add(Paragraph("SUBTOTAL GENERALES")
+                    .setFont(titleFont).setFontSize(9f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.RIGHT))
+                    .setBackgroundColor(COLOR_GENERALES).setPadding(5f).setBorder(null)
+            )
+            generalesTable.addCell(
+                Cell().add(Paragraph(formatMonto(presupuesto.totalFijas))
+                    .setFont(titleFont).setFontSize(9f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.RIGHT))
+                    .setBackgroundColor(COLOR_GENERALES).setPadding(5f).setBorder(null)
+            )
+            document.add(generalesTable)
+            document.add(Paragraph("").setMarginBottom(12f))
+        }
+
+        // ═══ TOTAL GENERAL ═══
+        val totalTable = Table(UnitValue.createPercentArray(floatArrayOf(5f, 2f))).useAllAvailableWidth()
+        totalTable.addCell(
+            Cell().add(Paragraph("TOTAL GENERAL PRESUPUESTO")
+                .setFont(titleFont).setFontSize(13f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.RIGHT))
+                .setBackgroundColor(COLOR_TOTAL_GENERAL).setPadding(8f).setBorder(null)
+        )
+        totalTable.addCell(
+            Cell().add(Paragraph(formatMonto(presupuesto.totalGeneral))
+                .setFont(titleFont).setFontSize(13f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.RIGHT))
+                .setBackgroundColor(COLOR_TOTAL_GENERAL).setPadding(8f).setBorder(null)
+        )
+        document.add(totalTable)
+    }
+
+    /** Agrega una fila de línea de partida a la tabla */
+    private fun addLineaPartida(table: Table, linea: ExcelGenerator.LineaPresupuesto, index: Int, font: PdfFont) {
+        val bgColor = if (index % 2 == 0) null else COLOR_FILA_PAR
+        val border = SolidBorder(ColorConstants.LIGHT_GRAY, 0.3f)
+
+        fun celda(text: String, alignment: TextAlignment = TextAlignment.LEFT): Cell {
+            val cell = Cell().add(Paragraph(text).setFont(font).setFontSize(8f).setTextAlignment(alignment))
+                .setPadding(4f).setBorder(border)
+            if (bgColor != null) cell.setBackgroundColor(bgColor)
+            return cell
+        }
+
+        table.addCell(celda(linea.descripcion))
+        table.addCell(celda(linea.unidad, TextAlignment.CENTER))
+        table.addCell(celda(String.format(Locale.getDefault(), "%.2f", redondear2(linea.cantidad)), TextAlignment.CENTER))
+        table.addCell(celda(formatMonto(linea.precioUnitario), TextAlignment.RIGHT))
+        table.addCell(celda(formatMonto(linea.subtotal), TextAlignment.RIGHT))
+    }
+
+    private fun createPresupuestoHeaderCell(text: String, font: PdfFont): Cell {
+        return Cell().add(
+            Paragraph(text).setFont(font).setFontSize(8f).setBold()
+                .setTextAlignment(TextAlignment.CENTER)
+                .setFontColor(ColorConstants.WHITE)
+        ).setPadding(4f).setBackgroundColor(COLOR_HEADER_PARTIDAS).setBorder(null)
     }
 
     private fun addParagraphWithLabel(document: Document, label: String, value: String?, font: PdfFont, fontSize: Float = 10f, marginBottom: Float = 2f) {

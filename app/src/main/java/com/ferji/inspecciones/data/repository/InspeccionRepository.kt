@@ -26,4 +26,8 @@ class InspeccionRepository @Inject constructor(
     fun getInspeccionesPendientes(): Flow<List<InspeccionEntity>> {
         return inspeccionDao.getInspeccionesByEstado("PENDIENTE")
     }
+
+    suspend fun getUltimaInspeccion(): InspeccionEntity? {
+        return inspeccionDao.getUltimaInspeccion()
+    }
 }

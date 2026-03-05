@@ -75,11 +75,14 @@ class PartidaViewModel @Inject constructor(
             // --- INICIO DE LA CORRECCIÓN CLAVE ---
             val partida = if (esNuevo) {
                 // SI ES NUEVO: No especificamos el ID. Dejamos que Room lo autogenere.
+                // Generamos un firebaseId temporal único para evitar conflictos con el
+                // índice UNIQUE sobre firebaseId (si queda vacío, @Upsert reemplaza la fila anterior).
                 PartidaEntity(
                     descripcion = descripcion,
                     unidad = unidad.name,
                     precioUnitario = precio,
                     partidaPrincipalId = partidaPrincipalId,
+                    firebaseId = "local_${java.util.UUID.randomUUID()}",
                     sincronizadoConFirebase = false, // Es nuevo, necesita subirse
                     eliminado = false
                 )

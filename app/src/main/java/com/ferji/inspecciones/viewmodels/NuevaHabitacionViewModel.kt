@@ -2,14 +2,14 @@ package com.ferji.inspecciones.viewmodels
 
 import android.net.Uri
 import android.util.Log
-import androidx.compose.foundation.layout.size
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-// Asegúrate que el import del DAO sea el correcto
 import com.ferji.inspecciones.data.dao.PartidaPrincipalDao
 import com.ferji.inspecciones.data.model.HabitacionEntity
+import com.ferji.inspecciones.data.model.PartidaNaturaleza
 import com.ferji.inspecciones.data.model.PartidaPrincipalEntity
 import com.ferji.inspecciones.data.repository.HabitacionRepository
+import com.ferji.inspecciones.data.repository.PartidaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -22,7 +22,8 @@ import javax.inject.Inject
 @HiltViewModel
 class NuevaHabitacionViewModel @Inject constructor(
     private val habitacionRepository: HabitacionRepository,
-    private val partidaPrincipalDao: PartidaPrincipalDao
+    private val partidaPrincipalDao: PartidaPrincipalDao,
+    private val partidaRepository: PartidaRepository
 ) : ViewModel() {
 
     companion object {
@@ -61,14 +62,38 @@ class NuevaHabitacionViewModel @Inject constructor(
     }
 
     /**
-     * Carga la lista de categorías (Partidas Principales) desde la base de datos.
+     * Carga la lista de categorías (Partidas Principales VARIABLES) desde la base de datos.
+     * Las partidas FIJAS (globales) se excluyen porque se agregan automáticamente al presupuesto.
      */
     private fun loadCategorias() {
         viewModelScope.launch {
-            // Asumiendo que tu DAO tiene un método para obtener todas las partidas principales
-            partidaPrincipalDao.getAll().collect { categorias ->
-                Log.d(TAG, "Categorías cargadas desde la BD. Encontrados: ${categorias.size} elementos.")
-                _listaCategoriasDisponibles.value = categorias
+            // 1. Sincronizar desde Firebase (fuente de verdad) antes de cargar
+            try {
+                withContext(Dispatchers.IO) {
+                    Log.d(TAG, "Sincronizando catálogo desde Firebase antes de cargar categorías...")
+                    partidaRepository.sincronizarCatalogoCompleto()
+                    Log.d(TAG, "Sincronización completada.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error al sincronizar desde Firebase: ${e.message}. Se usarán datos locales.", e)
+            }
+
+            // 2. Cargar TODAS las partidas y filtrar VARIABLES
+            partidaPrincipalDao.getAll().collect { todas ->
+                Log.d(TAG, "══════════════════════════════════════")
+                Log.d(TAG, "TODAS las partidas principales en BD: ${todas.size}")
+                todas.forEach { pp ->
+                    Log.d(TAG, "  → id=${pp.id}, nombre='${pp.nombre}', naturaleza=${pp.naturaleza}, firebaseId='${pp.firebaseId}'")
+                }
+                Log.d(TAG, "══════════════════════════════════════")
+
+                val variables = todas.filter { it.naturaleza == PartidaNaturaleza.VARIABLE }
+                Log.d(TAG, "Categorías VARIABLES para el combobox: ${variables.size}")
+                variables.forEach { pp ->
+                    Log.d(TAG, "  ✅ VARIABLE: id=${pp.id}, nombre='${pp.nombre}'")
+                }
+
+                _listaCategoriasDisponibles.value = variables
             }
         }
     }

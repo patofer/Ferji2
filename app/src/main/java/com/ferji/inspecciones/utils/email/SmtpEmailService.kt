@@ -63,7 +63,6 @@ class SmtpEmailService @Inject constructor(
             val smtpUser = SMTP_USER.trim()
             val smtpPassword = SMTP_PASSWORD.replace(" ", "").trim()
 
-            Log.d(TAG, "SMTP_USER='$smtpUser', SMTP_PASSWORD length=${smtpPassword.length}")
 
             // 3. Configurar propiedades SMTP con SSL directo (puerto 465)
             val props = Properties().apply {
@@ -82,9 +81,7 @@ class SmtpEmailService @Inject constructor(
             val session = Session.getInstance(props, object : Authenticator() {
                 override fun getPasswordAuthentication() =
                     PasswordAuthentication(smtpUser, smtpPassword)
-            }).apply {
-                debug = true // Habilita logs detallados de la sesión SMTP en Logcat
-            }
+            })
 
             // 5. Construir el mensaje
             val message = MimeMessage(session).apply {
@@ -140,6 +137,87 @@ class SmtpEmailService @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Error leyendo URI $uri: ${e.message}", e)
             null
+        }
+    }
+
+    override suspend fun enviarConAdjuntos(
+        destinatarios: List<String>,
+        cc: List<String>?,
+        asunto: String,
+        cuerpoHtml: String,
+        adjuntos: List<EmailService.Adjunto>
+    ): EmailService.EmailResult = withContext(Dispatchers.IO) {
+        try {
+            val smtpUser = SMTP_USER.trim()
+            val smtpPassword = SMTP_PASSWORD.replace(" ", "").trim()
+
+            val props = Properties().apply {
+                put("mail.smtp.auth", "true")
+                put("mail.smtp.ssl.enable", "true")
+                put("mail.smtp.host", SMTP_HOST)
+                put("mail.smtp.port", SMTP_PORT)
+                put("mail.smtp.socketFactory.port", SMTP_PORT)
+                put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory")
+                put("mail.smtp.ssl.trust", SMTP_HOST)
+                put("mail.smtp.connectiontimeout", "20000")
+                put("mail.smtp.timeout", "20000")
+            }
+
+            val session = Session.getInstance(props, object : Authenticator() {
+                override fun getPasswordAuthentication() =
+                    PasswordAuthentication(smtpUser, smtpPassword)
+            })
+
+            val message = MimeMessage(session).apply {
+                setFrom(InternetAddress(smtpUser, "Ferji Inspecciones"))
+                setRecipients(
+                    Message.RecipientType.TO,
+                    destinatarios.map { InternetAddress(it) }.toTypedArray()
+                )
+                cc?.takeIf { it.isNotEmpty() }?.let {
+                    setRecipients(
+                        Message.RecipientType.CC,
+                        it.map { addr -> InternetAddress(addr) }.toTypedArray()
+                    )
+                }
+                subject = asunto
+            }
+
+            // Cuerpo HTML
+            val htmlPart = MimeBodyPart().apply {
+                setContent(cuerpoHtml, "text/html; charset=utf-8")
+            }
+
+            // Ensamblar multipart con todos los adjuntos
+            val multipart: Multipart = MimeMultipart().apply {
+                addBodyPart(htmlPart)
+
+                for (adjunto in adjuntos) {
+                    val bytes = leerUriComoBytes(adjunto.uri)
+                    if (bytes != null) {
+                        val part = MimeBodyPart().apply {
+                            val dataSource: DataSource = ByteArrayDataSource(bytes, adjunto.mimeType)
+                            dataHandler = DataHandler(dataSource)
+                            fileName = adjunto.nombreArchivo
+                        }
+                        addBodyPart(part)
+                        Log.d(TAG, "Adjunto añadido: ${adjunto.nombreArchivo} (${bytes.size} bytes)")
+                    } else {
+                        Log.w(TAG, "No se pudo leer adjunto: ${adjunto.nombreArchivo}")
+                    }
+                }
+            }
+            message.setContent(multipart)
+
+            Log.d(TAG, "Conectando a SMTP $SMTP_HOST:$SMTP_PORT para enviar a $destinatarios con ${adjuntos.size} adjuntos")
+            Transport.send(message)
+            Log.i(TAG, "Email enviado correctamente a $destinatarios con ${adjuntos.size} adjuntos")
+
+            EmailService.EmailResult.Success
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error enviando email con adjuntos via SMTP: ${e.message}", e)
+            EmailService.EmailResult.Error("Error al enviar email: ${e.message}", e)
         }
     }
 }

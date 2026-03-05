@@ -4,6 +4,7 @@ package com.ferji.inspecciones.data.dao
 import androidx.room.*
 import com.ferji.inspecciones.data.model.DanoPartidaCrossRef
 import com.ferji.inspecciones.data.model.PartidaEntity
+import com.ferji.inspecciones.data.model.PartidaPrincipalEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -67,6 +68,20 @@ interface PartidaDao {
     @Query("SELECT * FROM partidas WHERE partida_principal_id = :idPadre")
     fun getPartidasDePrincipal(idPadre: Long): Flow<List<PartidaEntity>>
 
+    @Query("SELECT * FROM partidas WHERE partida_principal_id = :idPadre AND eliminado = 0")
+    suspend fun getPartidasDePrincipalSuspend(idPadre: Long): List<PartidaEntity>
+
     @Query("SELECT * FROM partidas WHERE eliminado = 1")
     suspend fun getEliminadas(): List<PartidaEntity>
+
+    @Transaction
+    @Query("""
+        SELECT P.* FROM partidas P
+        INNER JOIN danos_partidas_cross_ref C ON P.id = C.partidaId
+        WHERE C.claveDano = :claveDano
+    """)
+    suspend fun getPartidasForDanoSuspend(claveDano: String): List<PartidaEntity>
+
+    @Query("SELECT * FROM partidas_principales WHERE id = :id")
+    suspend fun getPartidaPrincipalById(id: Long): PartidaPrincipalEntity?
 }

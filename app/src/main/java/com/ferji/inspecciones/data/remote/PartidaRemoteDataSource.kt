@@ -29,6 +29,18 @@ class PartidaRemoteDataSource @Inject constructor(
     }
 
     /**
+     * Actualiza una PartidaPrincipal existente en Firestore usando su firebaseId.
+     */
+    suspend fun actualizarPartidaPrincipal(firebaseId: String, partida: PartidaPrincipalEntity) {
+        val datos = mapOf(
+            "nombre" to partida.nombre,
+            "tipoSuperficie" to partida.tipoSuperficie,
+            "naturaleza" to partida.naturaleza.name
+        )
+        partidaPrincipalCollection.document(firebaseId).update(datos).await()
+    }
+
+    /**
      * Sube una PartidaEntity a la subcolección de su padre en Firestore y devuelve el ID generado.
      */
     suspend fun subirPartidaHija(idPadreFirebase: String, partidaHija: PartidaEntity): String {

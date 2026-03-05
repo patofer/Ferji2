@@ -20,4 +20,7 @@ interface InspeccionDao {
 
     @Query("SELECT * FROM inspecciones WHERE estado = :estado ORDER BY fecha_creacion DESC")
     fun getInspeccionesByEstado(estado: String): Flow<List<InspeccionEntity>>
+
+    @Query("SELECT * FROM inspecciones ORDER BY fecha_creacion DESC LIMIT 1")
+    suspend fun getUltimaInspeccion(): InspeccionEntity?
 }

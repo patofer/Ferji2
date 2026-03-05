@@ -19,6 +19,10 @@ interface PartidaPrincipalDao {
     @Query("SELECT * FROM partidas_principales ORDER BY nombre ASC")
     fun getAll(): Flow<List<PartidaPrincipalEntity>>
 
+    // Obtiene solo las partidas principales VARIABLES (excluye las FIJAS/globales)
+    @Query("SELECT * FROM partidas_principales WHERE naturaleza = 'VARIABLE' ORDER BY nombre ASC")
+    fun getAllVariables(): Flow<List<PartidaPrincipalEntity>>
+
     @Transaction // Esencial para que la operación de leer dos tablas sea atómica y segura.
     @Query("SELECT * FROM partidas_principales WHERE id = :id")
     fun getPartidaPrincipalWithDetails(id: Long): Flow<PartidaPrincipalWithDetails?>
@@ -37,5 +41,11 @@ interface PartidaPrincipalDao {
 
     @Query("SELECT * FROM partidas_principales WHERE id = :id")
     suspend fun getById(id: Long): PartidaPrincipalEntity?
+
+    @Query("SELECT * FROM partidas_principales WHERE naturaleza = 'FIJA'")
+    suspend fun getPartidasFijas(): List<PartidaPrincipalEntity>
+
+    @Query("SELECT * FROM partidas_principales WHERE nombre = :nombre LIMIT 1")
+    suspend fun getByNombre(nombre: String): PartidaPrincipalEntity?
 
 }
