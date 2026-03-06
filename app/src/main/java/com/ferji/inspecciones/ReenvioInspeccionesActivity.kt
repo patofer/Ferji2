@@ -154,9 +154,9 @@ fun PantallaReenvioInspecciones(
                 FerjiEmptyState(
                     icon = "📭",
                     title = if (textoBusqueda.isNotEmpty()) "No se encontraron resultados"
-                            else "No hay inspecciones registradas",
+                            else "No hay inspecciones completadas",
                     subtitle = if (textoBusqueda.isNotEmpty()) "Intenta con otro término de búsqueda"
-                               else "Las inspecciones completadas aparecerán aquí"
+                               else "Complete una inspección para poder enviarla"
                 )
             } else {
                 LazyColumn(
@@ -282,7 +282,7 @@ fun TarjetaInspeccionReenvio(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(Spacing.sm))
-                        Text("Enviar PDF + Presupuesto",
+                        Text("Enviar Inspección",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold)
                     }

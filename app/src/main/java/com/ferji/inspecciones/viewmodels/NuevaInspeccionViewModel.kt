@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ferji.inspecciones.data.model.HabitacionEntity
 import com.ferji.inspecciones.data.model.InspeccionEntity
+import com.ferji.inspecciones.data.repository.EmailSettingsRepository
 import com.ferji.inspecciones.data.repository.HabitacionRepository
 import com.ferji.inspecciones.data.repository.InspeccionRepository
 import com.ferji.inspecciones.data.repository.PartidaRepository
@@ -43,7 +44,8 @@ class NuevaInspeccionViewModel @Inject constructor(
     private val habitacionRepository: HabitacionRepository,
     private val partidaRepository: PartidaRepository,
     private val emailService: EmailService,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val emailSettingsRepository: EmailSettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NuevaInspeccionScreenUiState())
@@ -75,20 +77,14 @@ class NuevaInspeccionViewModel @Inject constructor(
         private set
     var isRutInspectorValid by mutableStateOf(true)
         private set
-    // Fin Campos de Formulario
 
     private var currentInspeccionIdForPdf: Long? = null
     private var currentPdfUriForEmail: Uri? = null
 
-
     init {
-        // --- BLOQUE `init` ACTUALIZADO PARA AUTOCOMPLETAR CAMPOS ---
         viewModelScope.launch {
-            // ✅ CORRECCIÓN: Usamos la propiedad 'currentUserSession' en lugar de la función 'getUserSession()'
             val sesionActual = userRepository.currentUserSession.firstOrNull()
             sesionActual?.let { user ->
-                // Asignamos el RUT y el Email del usuario logeado a los campos correspondientes.
-                // Esto automáticamente llamará a las funciones on...Change y validará los campos.
                 user.rut?.let { onRutInspectorChange(it) }
                 user.email?.let { onMailChange(it) }
                 Log.d("NuevaInspVM", "Campos inicializados desde sesión: RUT Inspector=${user.rut}, Email=${user.email}")
@@ -96,16 +92,12 @@ class NuevaInspeccionViewModel @Inject constructor(
         }
     }
 
-    // (El resto de las funciones no necesita cambios para esta funcionalidad)
-
     private fun actualizarTodosCamposLlenos() {
         val rutNoVacio = rut.isNotBlank()
-        // Llamada correcta a la función de extensión
         val rutFormatoValido = rut.validarRutChileno()
         val siniestroNoVacio = siniestro.isNotBlank()
         val direccionNoVacia = direccion.isNotBlank()
         val rutInspectorNoVacio = rutInspector.isNotBlank()
-        // Llamada correcta a la función de extensión
         val rutInspectorFormatoValido = rutInspector.validarRutChileno()
         val mailNoVacio = mail.isNotBlank()
 
@@ -122,7 +114,6 @@ class NuevaInspeccionViewModel @Inject constructor(
 
     fun onRutChange(nuevoRut: String) {
         rut = nuevoRut
-        // Llamada correcta a la función de extensión
         isRutValid = if (nuevoRut.isBlank()) true else nuevoRut.validarRutChileno()
         actualizarTodosCamposLlenos()
     }
@@ -139,14 +130,12 @@ class NuevaInspeccionViewModel @Inject constructor(
 
     fun onRutInspectorChange(nuevoRutInspector: String) {
         rutInspector = nuevoRutInspector
-        // Llamada correcta a la función de extensión
         isRutInspectorValid = if (nuevoRutInspector.isBlank()) true else nuevoRutInspector.validarRutChileno()
         actualizarTodosCamposLlenos()
     }
 
     fun onMailChange(nuevoMail: String) {
         mail = nuevoMail
-        // Llamada correcta a la función de extensión
         isMailValid = nuevoMail.esEmailValido()
         actualizarTodosCamposLlenos()
     }
@@ -205,6 +194,11 @@ class NuevaInspeccionViewModel @Inject constructor(
                 }
 
                 Log.d("NuevaInspVM", "Intentando generar PDF para inspección ID: ${inspeccion.id} con ${habitaciones.size} habitaciones.")
+
+                // Marcar inspección como COMPLETADA
+                inspeccionRepository.actualizarEstado(idDeInspeccionParaPdf, "COMPLETADA")
+                Log.d("NuevaInspVM", "Inspección $idDeInspeccionParaPdf marcada como COMPLETADA")
+
                 val pdfCreationResult = PdfGenerator.createPdf(applicationContext, inspeccion, habitaciones, partidaRepository)
 
                 val pdfUriParaEmail: Uri? = when {
@@ -232,13 +226,13 @@ class NuevaInspeccionViewModel @Inject constructor(
                 } else {
                     Log.e("NuevaInspVM", "PdfGenerator.createPdf devolvió null o no se pudo obtener URI.")
                     _pdfGenerationStatus.value = PdfGenerationResult.Error("No se pudo generar o guardar el PDF.")
-                    _uiState.update { it.copy(isLoadingGlobal = false,isFinalizingAndNavigating = false) }
+                    _uiState.update { it.copy(isLoadingGlobal = false, isFinalizingAndNavigating = false) }
                 }
 
             } catch (e: Exception) {
                 Log.e("NuevaInspVM", "Excepción al generar PDF: ${e.message}", e)
                 _pdfGenerationStatus.value = PdfGenerationResult.Error("Error generando PDF: ${e.message}")
-                _uiState.update { it.copy(isLoadingGlobal = false,isFinalizingAndNavigating = false) }
+                _uiState.update { it.copy(isLoadingGlobal = false, isFinalizingAndNavigating = false) }
             }
         }
     }
@@ -253,7 +247,6 @@ class NuevaInspeccionViewModel @Inject constructor(
             _uiState.update { it.copy(isSendingEmail = true) }
             Log.d("NuevaInspVM", "proceedToFinalizeAndExit: isSendingEmail = true, intentando enviar email...")
 
-            // Enviar email usando el cliente nativo del dispositivo
             prepararYEnviarEmailNativo(inspeccionId, pdfUri)
 
             _uiState.update { it.copy(isSendingEmail = false) }
@@ -275,8 +268,11 @@ class NuevaInspeccionViewModel @Inject constructor(
     }
 
     /**
-     * Genera el presupuesto Excel, y envía el email con PDF + Excel adjuntos
-     * de forma automática y silenciosa via SMTP.
+     * Usa la configuración dinámica de Firestore para determinar destinatarios.
+     * Envía emails separados al admin y al inspector según las reglas configuradas:
+     * - Admin: siempre recibe PDF + Excel
+     * - Inspector: recibe PDF solo si enviarInspeccionAlInspector=true,
+     *              recibe Excel solo si enviarPresupuestoAlInspector=true
      */
     private suspend fun prepararYEnviarEmailNativo(inspeccionId: Long, pdfUri: Uri) {
         val inspeccion: InspeccionEntity? = try {
@@ -293,51 +289,129 @@ class NuevaInspeccionViewModel @Inject constructor(
             return
         }
 
-        val destinatario = inspeccion.mail
-        if (!destinatario.esEmailValido()) {
-            Log.e("NuevaInspVM", "Email del destinatario inválido: $destinatario")
-            _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Email del destinatario inválido: $destinatario", isError = true))
-            return
-        }
+        // --- Cargar configuración dinámica desde Firestore ---
+        val emailSettings = emailSettingsRepository.obtenerConfiguracion()
+        Log.d("NuevaInspVM", "Configuración de email cargada: $emailSettings")
 
         // --- Generar el presupuesto Excel ---
         val habitaciones = habitacionRepository.getHabitacionesPorInspeccionId(inspeccionId)
         val excelGenerator = ExcelGenerator(applicationContext)
         val excelResult = excelGenerator.generarPresupuesto(inspeccion, habitaciones, partidaRepository)
 
-        // --- Preparar los adjuntos ---
-        val adjuntos = mutableListOf<EmailService.Adjunto>()
-
-        // Adjunto 1: PDF del informe
+        // --- Preparar adjuntos base ---
         val nombrePdf = "Inspeccion_${inspeccion.siniestro}_${inspeccion.rut}.pdf"
-        adjuntos.add(
-            EmailService.Adjunto(
-                uri = pdfUri,
-                nombreArchivo = nombrePdf,
-                mimeType = "application/pdf"
-            )
+        val adjuntoPdf = EmailService.Adjunto(
+            uri = pdfUri,
+            nombreArchivo = nombrePdf,
+            mimeType = "application/pdf"
         )
-
-        // Adjunto 2: Excel del presupuesto (si se generó correctamente)
-        if (excelResult?.uri != null) {
-            adjuntos.add(
-                EmailService.Adjunto(
-                    uri = excelResult.uri,
-                    nombreArchivo = excelResult.fileName,
-                    mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+        val adjuntoExcel = if (excelResult?.uri != null) {
+            EmailService.Adjunto(
+                uri = excelResult.uri,
+                nombreArchivo = excelResult.fileName,
+                mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            Log.d("NuevaInspVM", "Excel generado: ${excelResult.fileName}")
+        } else null
+
+        if (adjuntoExcel != null) {
+            Log.d("NuevaInspVM", "Excel generado: ${excelResult?.fileName}")
         } else {
-            Log.w("NuevaInspVM", "No se pudo generar el presupuesto Excel. Se enviará solo el PDF.")
+            Log.w("NuevaInspVM", "No se pudo generar el presupuesto Excel.")
         }
 
-        val asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}"
+        // --- CC general ---
+        val ccList = mutableListOf<String>()
+        if (emailSettings.emailCc.isNotBlank() && emailSettings.emailCc.esEmailValido()) {
+            ccList.add(emailSettings.emailCc)
+        }
 
-        val cuerpoHtml = """
+        // ═══════════════════════════════════════════════
+        // 1. EMAIL AL ADMINISTRADOR (siempre PDF + Excel)
+        // ═══════════════════════════════════════════════
+        if (emailSettings.emailAdmin.isNotBlank() && emailSettings.emailAdmin.esEmailValido()) {
+            val adjuntosAdmin = mutableListOf(adjuntoPdf)
+            if (adjuntoExcel != null) adjuntosAdmin.add(adjuntoExcel)
+
+            val ccAdmin = ccList.filterNot { it.equals(emailSettings.emailAdmin, ignoreCase = true) }.ifEmpty { null }
+
+            val cuerpoAdmin = buildCuerpoHtml(inspeccion, adjuntoExcel != null)
+
+            Log.d("NuevaInspVM", "Enviando email ADMIN a: ${emailSettings.emailAdmin}, CC: $ccAdmin, adjuntos: ${adjuntosAdmin.size}")
+            val resultadoAdmin = emailService.enviarConAdjuntos(
+                destinatarios = listOf(emailSettings.emailAdmin),
+                cc = ccAdmin,
+                asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}",
+                cuerpoHtml = cuerpoAdmin,
+                adjuntos = adjuntosAdmin
+            )
+            when (resultadoAdmin) {
+                is EmailService.EmailResult.Success -> {
+                    Log.i("NuevaInspVM", "Email ADMIN enviado correctamente a ${emailSettings.emailAdmin}")
+                }
+                is EmailService.EmailResult.Error -> {
+                    Log.e("NuevaInspVM", "Error enviando email ADMIN: ${resultadoAdmin.message}")
+                    _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error enviando al admin: ${resultadoAdmin.message}", isError = true))
+                }
+            }
+        } else {
+            Log.w("NuevaInspVM", "No hay email de administrador configurado. Saltando envío al admin.")
+        }
+
+        // ═══════════════════════════════════════════════
+        // 2. EMAIL AL INSPECTOR (según reglas de envío)
+        // ═══════════════════════════════════════════════
+        val emailInspector = inspeccion.mail
+        val enviarPdfAlInspector = emailSettings.enviarInspeccionAlInspector
+        val enviarExcelAlInspector = emailSettings.enviarPresupuestoAlInspector
+
+        // Solo enviar si al menos una regla está activa y el email es válido
+        if ((enviarPdfAlInspector || enviarExcelAlInspector) && emailInspector.esEmailValido()) {
+            // No enviar al inspector si es el mismo que el admin (ya lo recibió)
+            if (!emailInspector.equals(emailSettings.emailAdmin, ignoreCase = true)) {
+                val adjuntosInspector = mutableListOf<EmailService.Adjunto>()
+                if (enviarPdfAlInspector) adjuntosInspector.add(adjuntoPdf)
+                if (enviarExcelAlInspector && adjuntoExcel != null) adjuntosInspector.add(adjuntoExcel)
+
+                if (adjuntosInspector.isNotEmpty()) {
+                    val tieneExcel = enviarExcelAlInspector && adjuntoExcel != null
+                    val cuerpoInspector = buildCuerpoHtml(inspeccion, tieneExcel)
+
+                    Log.d("NuevaInspVM", "Enviando email INSPECTOR a: $emailInspector, adjuntos: ${adjuntosInspector.size} (PDF=$enviarPdfAlInspector, Excel=$enviarExcelAlInspector)")
+                    val resultadoInspector = emailService.enviarConAdjuntos(
+                        destinatarios = listOf(emailInspector),
+                        cc = null,
+                        asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}",
+                        cuerpoHtml = cuerpoInspector,
+                        adjuntos = adjuntosInspector
+                    )
+                    when (resultadoInspector) {
+                        is EmailService.EmailResult.Success -> {
+                            Log.i("NuevaInspVM", "Email INSPECTOR enviado correctamente a $emailInspector")
+                        }
+                        is EmailService.EmailResult.Error -> {
+                            Log.e("NuevaInspVM", "Error enviando email INSPECTOR: ${resultadoInspector.message}")
+                            _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error enviando al inspector: ${resultadoInspector.message}", isError = true))
+                        }
+                    }
+                }
+            } else {
+                Log.d("NuevaInspVM", "Inspector y admin son el mismo email, no se envía duplicado.")
+            }
+        } else {
+            Log.d("NuevaInspVM", "No se envía email al inspector (reglas: PDF=$enviarPdfAlInspector, Excel=$enviarExcelAlInspector, email válido=${emailInspector.esEmailValido()})")
+        }
+
+        _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Proceso de envío de emails completado."))
+    }
+
+    /**
+     * Genera el cuerpo HTML del email.
+     */
+    private fun buildCuerpoHtml(inspeccion: InspeccionEntity, incluirExcel: Boolean): String {
+        return """
             <html><body>
             <p>Estimado/a,</p>
-            <p>Adjunto encontrará el informe de la inspección y el presupuesto de reparación
+            <p>Adjunto encontrará el informe de la inspección${if (incluirExcel) " y el presupuesto de reparación" else ""}
             para el <strong>siniestro N° ${inspeccion.siniestro}</strong>.</p>
             <table border="1" cellpadding="6" cellspacing="0">
                 <tr><th>RUT Cliente</th><td>${inspeccion.rut}</td></tr>
@@ -348,35 +422,12 @@ class NuevaInspeccionViewModel @Inject constructor(
             <p><strong>Documentos adjuntos:</strong></p>
             <ul>
                 <li>Informe de Inspección (PDF)</li>
-                ${if (excelResult?.uri != null) "<li>Presupuesto de Reparación (Excel)</li>" else ""}
+                ${if (incluirExcel) "<li>Presupuesto de Reparación (Excel)</li>" else ""}
             </ul>
             <p>Si tiene alguna consulta, no dude en contactarnos.</p>
             <p>Saludos cordiales,<br/><strong>Equipo Ferji Inspecciones</strong></p>
             </body></html>
         """.trimIndent()
-
-        val cc = listOf("patriciofernande@gmail.com")
-            .filterNot { it.equals(destinatario, ignoreCase = true) }
-            .ifEmpty { null }
-
-        Log.d("NuevaInspVM", "Enviando email a: $destinatario con ${adjuntos.size} adjuntos")
-        val resultado = emailService.enviarConAdjuntos(
-            destinatarios = listOf(destinatario),
-            cc = cc,
-            asunto = asunto,
-            cuerpoHtml = cuerpoHtml,
-            adjuntos = adjuntos
-        )
-
-        when (resultado) {
-            is EmailService.EmailResult.Success -> {
-                Log.i("NuevaInspVM", "Email enviado correctamente a $destinatario")
-                _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Informe y presupuesto enviados a $destinatario"))
-            }
-            is EmailService.EmailResult.Error -> {
-                Log.e("NuevaInspVM", "Error enviando email: ${resultado.message}")
-                _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Error al enviar email: ${resultado.message}", isError = true))
-            }
-        }
     }
 }
+

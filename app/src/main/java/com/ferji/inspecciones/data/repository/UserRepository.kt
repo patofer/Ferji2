@@ -21,7 +21,7 @@ class UserRepository @Inject constructor(
     // La lista de administradores sigue siendo necesaria para asignar el rol
     private val adminUsers: List<AdminUser> = listOf(
         AdminUser("155402946", "Patricio Fernandez", "pfernandeza@gmail.com"),
-        AdminUser("123456789", "Otro Admin", "otro.admin@email.com")
+        AdminUser("16697643k", "Felipe Fernandez", "felipe@ferji.cl")
     )
 
     // ✅ --- INICIO DE LA SOLUCIÓN --- ✅

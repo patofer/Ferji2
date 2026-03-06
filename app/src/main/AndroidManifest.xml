@@ -102,6 +102,12 @@
             android:label="Reenviar Inspección"
             android:theme="@style/Theme.Ferji"/>
 
+        <activity
+            android:name=".ConfiguracionActivity"
+            android:exported="false"
+            android:label="Configuración"
+            android:theme="@style/Theme.Ferji"/>
+
 
     </application>
 

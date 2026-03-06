@@ -63,7 +63,10 @@ fun PantallaMenuPrincipal(esAdministrador: Boolean) {
                     FerjiTitleBar(subtitle = "Menú Principal")
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO: Settings */ }) {
+                    IconButton(onClick = {
+                        val intent = Intent(context, ConfiguracionActivity::class.java)
+                        context.startActivity(intent)
+                    }) {
                         Icon(
                             Icons.Outlined.Settings,
                             contentDescription = "Configuración",
@@ -113,7 +116,7 @@ fun PantallaMenuPrincipal(esAdministrador: Boolean) {
 
             FerjiMenuCard(
                 title = "Enviar Inspección",
-                subtitle = "Reenviar PDF y presupuesto",
+                subtitle = "Reenviar Inspeccíon PDF ",
                 icon = Icons.AutoMirrored.Filled.Send,
                 gradientColors = listOf(FerjiOrange, Color(0xFFD35400)),
                 onClick = {
@@ -122,13 +125,14 @@ fun PantallaMenuPrincipal(esAdministrador: Boolean) {
                 }
             )
 
-            FerjiMenuCard(
-                title = "Historial",
-                subtitle = "Inspecciones completadas",
-                icon = Icons.Outlined.History,
-                gradientColors = listOf(Tertiary40, Tertiary30),
-                onClick = { /* TODO: Historial */ }
-            )
+            // TODO: Descomentar cuando se implemente la pantalla de Historial
+            // FerjiMenuCard(
+            //     title = "Historial",
+            //     subtitle = "Inspecciones completadas",
+            //     icon = Icons.Outlined.History,
+            //     gradientColors = listOf(Tertiary40, Tertiary30),
+            //     onClick = { /* TODO: Historial */ }
+            // )
 
             // ═══ SECCIÓN: Administración (solo admin) ═══
             if (esAdministrador) {
@@ -153,6 +157,17 @@ fun PantallaMenuPrincipal(esAdministrador: Boolean) {
                     gradientColors = listOf(Color(0xFF625B71), Color(0xFF514A5F)),
                     onClick = {
                         val intent = Intent(context, MantenedorPreciosActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                )
+
+                FerjiMenuCard(
+                    title = "Configuración de Correos",
+                    subtitle = "Destinatarios y reglas de envío",
+                    icon = Icons.Outlined.Settings,
+                    gradientColors = listOf(Color(0xFF4A6741), Color(0xFF3B5534)),
+                    onClick = {
+                        val intent = Intent(context, ConfiguracionActivity::class.java)
                         context.startActivity(intent)
                     }
                 )

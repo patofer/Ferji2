@@ -81,12 +81,17 @@ class NuevaInspeccionActivity : ComponentActivity() {
         const val RESULT_INSPECCION_FINALIZADA = 1001
         const val TAG = "NuevaInspActiv"
         const val EXTRA_INSPECCION_ID = "INSPECCION_ID"
+        const val EXTRA_MODO_FINALIZAR = "MODO_FINALIZAR"
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate")
+
+        // Verificar si se abrió en modo "finalizar directamente"
+        val modoFinalizar = intent.getBooleanExtra(EXTRA_MODO_FINALIZAR, false)
+        val inspeccionIdRecibido = intent.getLongExtra(EXTRA_INSPECCION_ID, -1L)
 
         nuevaHabitacionLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
@@ -222,6 +227,12 @@ class NuevaInspeccionActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+
+        // Si se abrió en modo finalizar, iniciar el proceso de PDF + email inmediatamente
+        if (modoFinalizar && inspeccionIdRecibido != -1L) {
+            Log.d(TAG, "Modo FINALIZAR activado para inspección ID=$inspeccionIdRecibido")
+            viewModel.finalizarInspeccionYGenerarPdf(inspeccionIdRecibido)
         }
     }
 

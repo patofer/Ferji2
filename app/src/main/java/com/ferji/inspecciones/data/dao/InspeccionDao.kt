@@ -23,4 +23,7 @@ interface InspeccionDao {
 
     @Query("SELECT * FROM inspecciones ORDER BY fecha_creacion DESC LIMIT 1")
     suspend fun getUltimaInspeccion(): InspeccionEntity?
+
+    @Query("UPDATE inspecciones SET estado = :nuevoEstado WHERE id = :id")
+    suspend fun actualizarEstado(id: Long, nuevoEstado: String)
 }

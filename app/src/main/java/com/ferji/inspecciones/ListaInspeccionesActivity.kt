@@ -1,9 +1,14 @@
 package com.ferji.inspecciones
 
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ferji.inspecciones.data.database.AppDatabase
+import com.ferji.inspecciones.data.dao.HabitacionDao
 import com.ferji.inspecciones.data.repository.InspeccionRepository
 import com.ferji.inspecciones.ui.components.FerjiEmptyState
 import com.ferji.inspecciones.ui.components.FerjiGradientDivider
@@ -40,11 +46,29 @@ import java.util.*
 
 
 class ListaInspeccionesActivity : ComponentActivity() {
+
+    private lateinit var retomarInspeccionLauncher: ActivityResultLauncher<Intent>
+    private var inspeccionIdRetomada: Long = -1L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val database = AppDatabase.getDatabase(this)
         val repository = InspeccionRepository(database.inspeccionDao())
+        val habitacionDao = database.habitacionDao()
+
+        retomarInspeccionLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == NuevaInspeccionActivity.RESULT_INSPECCION_FINALIZADA) {
+                // Abrir NuevaInspeccionActivity en modo finalizar para generar PDF y enviar emails
+                val intent = Intent(this, NuevaInspeccionActivity::class.java).apply {
+                    putExtra(NuevaInspeccionActivity.EXTRA_MODO_FINALIZAR, true)
+                    putExtra(NuevaInspeccionActivity.EXTRA_INSPECCION_ID, inspeccionIdRetomada)
+                }
+                startActivity(intent)
+            }
+        }
 
         setContent {
             FerjiTheme {
@@ -52,7 +76,17 @@ class ListaInspeccionesActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    PantallaListaInspecciones(repository, onBack = { finish() })
+                    PantallaListaInspecciones(
+                        repository = repository,
+                        habitacionDao = habitacionDao,
+                        onBack = { finish() },
+                        onRetomarInspeccion = { inspeccionId ->
+                            inspeccionIdRetomada = inspeccionId
+                            val intent = Intent(this, NuevaHabitacionActivity::class.java)
+                                .putExtra("INSPECCION_ID", inspeccionId)
+                            retomarInspeccionLauncher.launch(intent)
+                        }
+                    )
                 }
             }
         }
@@ -63,9 +97,13 @@ class ListaInspeccionesActivity : ComponentActivity() {
 @Composable
 fun PantallaListaInspecciones(
     repository: InspeccionRepository,
-    onBack: () -> Unit = {}
+    habitacionDao: HabitacionDao,
+    onBack: () -> Unit = {},
+    onRetomarInspeccion: (Long) -> Unit = {}
 ) {
     var inspecciones by remember { mutableStateOf(emptyList<com.ferji.inspecciones.data.model.InspeccionEntity>()) }
+    // Mapa de inspeccionId → cantidad de habitaciones
+    var habitacionesCount by remember { mutableStateOf(mapOf<Long, Int>()) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -73,7 +111,13 @@ fun PantallaListaInspecciones(
         launch(Dispatchers.IO) {
             try {
                 repository.getAllInspecciones().collect { lista ->
+                    // Contar habitaciones para cada inspección
+                    val counts = mutableMapOf<Long, Int>()
+                    lista.forEach { insp ->
+                        counts[insp.id] = habitacionDao.contarHabitaciones(insp.id)
+                    }
                     inspecciones = lista
+                    habitacionesCount = counts
                     isLoading = false
                 }
             } catch (e: Exception) {
@@ -225,7 +269,15 @@ fun PantallaListaInspecciones(
                         }
 
                         items(inspecciones) { inspeccion ->
-                            TarjetaInspeccion(inspeccion = inspeccion)
+                            TarjetaInspeccion(
+                                inspeccion = inspeccion,
+                                cantidadHabitaciones = habitacionesCount[inspeccion.id] ?: 0,
+                                onRetomar = {
+                                    if (inspeccion.estado == "PENDIENTE") {
+                                        onRetomarInspeccion(inspeccion.id)
+                                    }
+                                }
+                            )
                         }
                         item { Spacer(modifier = Modifier.height(Spacing.lg)) }
                     }
@@ -236,7 +288,11 @@ fun PantallaListaInspecciones(
 }
 
 @Composable
-fun TarjetaInspeccion(inspeccion: com.ferji.inspecciones.data.model.InspeccionEntity) {
+fun TarjetaInspeccion(
+    inspeccion: com.ferji.inspecciones.data.model.InspeccionEntity,
+    cantidadHabitaciones: Int = 0,
+    onRetomar: () -> Unit = {}
+) {
     val statusColor = when (inspeccion.estado) {
         "PENDIENTE" -> FerjiOrange
         "COMPLETADA" -> FerjiGreen
@@ -244,7 +300,12 @@ fun TarjetaInspeccion(inspeccion: com.ferji.inspecciones.data.model.InspeccionEn
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (inspeccion.estado == "PENDIENTE") Modifier.clickable { onRetomar() }
+                else Modifier
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -311,26 +372,54 @@ fun TarjetaInspeccion(inspeccion: com.ferji.inspecciones.data.model.InspeccionEn
                 FerjiInfoRow(label = "Dirección", value = inspeccion.direccion)
                 FerjiInfoRow(label = "Inspector", value = inspeccion.rutInspector)
                 FerjiInfoRow(label = "Email", value = inspeccion.mail)
+                FerjiInfoRow(label = "Habitaciones", value = "$cantidadHabitaciones registrada${if (cantidadHabitaciones != 1) "s" else ""}")
 
                 Spacer(modifier = Modifier.height(Spacing.xs))
 
-                // Fecha
+                // Fecha y botón retomar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Outlined.Schedule,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.outline
-                    )
-                    Spacer(modifier = Modifier.width(Spacing.xxs))
-                    Text(
-                        text = formatearFecha(inspeccion.fechaCreacion),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.Schedule,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.xxs))
+                        Text(
+                            text = formatearFecha(inspeccion.fechaCreacion),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    if (inspeccion.estado == "PENDIENTE") {
+                        FilledTonalButton(
+                            onClick = onRetomar,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = FerjiOrange.copy(alpha = 0.15f),
+                                contentColor = FerjiOrange
+                            )
+                        ) {
+                            Icon(
+                                Icons.Outlined.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Retomar",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 }
             }
         }

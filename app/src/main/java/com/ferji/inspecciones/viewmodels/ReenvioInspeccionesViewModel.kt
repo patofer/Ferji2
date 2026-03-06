@@ -7,10 +7,10 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ferji.inspecciones.data.model.InspeccionEntity
+import com.ferji.inspecciones.data.repository.EmailSettingsRepository
 import com.ferji.inspecciones.data.repository.HabitacionRepository
 import com.ferji.inspecciones.data.repository.InspeccionRepository
 import com.ferji.inspecciones.data.repository.PartidaRepository
-import com.ferji.inspecciones.utils.ExcelGenerator
 import com.ferji.inspecciones.utils.PdfGenerator
 import com.ferji.inspecciones.utils.email.EmailService
 import com.ferji.inspecciones.utils.esEmailValido
@@ -31,7 +31,8 @@ class ReenvioInspeccionesViewModel @Inject constructor(
     private val inspeccionRepository: InspeccionRepository,
     private val habitacionRepository: HabitacionRepository,
     private val partidaRepository: PartidaRepository,
-    private val emailService: EmailService
+    private val emailService: EmailService,
+    private val emailSettingsRepository: EmailSettingsRepository
 ) : ViewModel() {
 
     companion object {
@@ -42,8 +43,8 @@ class ReenvioInspeccionesViewModel @Inject constructor(
     private val _textoBusqueda = MutableStateFlow("")
     val textoBusqueda: StateFlow<String> = _textoBusqueda.asStateFlow()
 
-    // Lista de todas las inspecciones
-    private val _todasLasInspecciones = inspeccionRepository.getAllInspecciones()
+    // Lista solo de inspecciones completadas
+    private val _todasLasInspecciones = inspeccionRepository.getInspeccionesByEstado("COMPLETADA")
 
     // Lista filtrada combinando búsqueda + datos
     val inspeccionesFiltradas: StateFlow<List<InspeccionEntity>> = combine(
@@ -87,10 +88,11 @@ class ReenvioInspeccionesViewModel @Inject constructor(
     }
 
     /**
-     * Genera PDF + Excel y envía email para la inspección seleccionada.
+     * Genera PDF y envía email para la inspección seleccionada.
+     * Solo envía el PDF de inspección (sin presupuesto Excel).
      */
     fun reenviarInspeccion(inspeccion: InspeccionEntity) {
-        if (_reenvioState.value.isLoading) return // Evitar doble clic
+        if (_reenvioState.value.isLoading) return
 
         viewModelScope.launch {
             _reenvioState.value = ReenvioState(isLoading = true, inspeccionIdEnProceso = inspeccion.id)
@@ -125,44 +127,51 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                 }
                 Log.d(TAG, "PDF generado: ${pdfResult.fileName}")
 
-                // 3. Generar Excel
-                val excelGenerator = ExcelGenerator(applicationContext)
-                val excelResult = excelGenerator.generarPresupuesto(inspeccion, habitaciones, partidaRepository)
-                Log.d(TAG, "Excel: ${excelResult?.fileName ?: "No generado"}")
+                // 3. Cargar configuración de emails desde Firestore
+                val emailSettings = emailSettingsRepository.obtenerConfiguracion()
+                Log.d(TAG, "Configuración de email: $emailSettings")
 
-                // 4. Preparar adjuntos
-                val adjuntos = mutableListOf<EmailService.Adjunto>()
-                adjuntos.add(
+                // 4. Determinar destinatarios
+                val destinatarios = mutableListOf<String>()
+                if (emailSettings.emailAdmin.isNotBlank() && emailSettings.emailAdmin.esEmailValido()) {
+                    destinatarios.add(emailSettings.emailAdmin)
+                }
+                // En reenvío, siempre incluir al inspector
+                val emailInspector = inspeccion.mail
+                if (emailInspector.esEmailValido() && !destinatarios.contains(emailInspector)) {
+                    destinatarios.add(emailInspector)
+                }
+
+                if (destinatarios.isEmpty()) {
+                    _reenvioState.value = ReenvioState(
+                        mensaje = "No hay destinatarios configurados.", isError = true
+                    )
+                    return@launch
+                }
+
+                // CC
+                val ccList = mutableListOf<String>()
+                if (emailSettings.emailCc.isNotBlank() && emailSettings.emailCc.esEmailValido()) {
+                    if (!destinatarios.contains(emailSettings.emailCc)) {
+                        ccList.add(emailSettings.emailCc)
+                    }
+                }
+                val cc = ccList.ifEmpty { null }
+
+                // 5. Preparar adjunto (solo PDF)
+                val adjuntos = listOf(
                     EmailService.Adjunto(
                         uri = pdfUri,
                         nombreArchivo = "Inspeccion_${inspeccion.siniestro}_${inspeccion.rut}.pdf",
                         mimeType = "application/pdf"
                     )
                 )
-                if (excelResult?.uri != null) {
-                    adjuntos.add(
-                        EmailService.Adjunto(
-                            uri = excelResult.uri,
-                            nombreArchivo = excelResult.fileName,
-                            mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-                    )
-                }
-
-                // 5. Enviar email
-                val destinatario = inspeccion.mail
-                if (!destinatario.esEmailValido()) {
-                    _reenvioState.value = ReenvioState(
-                        mensaje = "Email inválido: $destinatario", isError = true
-                    )
-                    return@launch
-                }
 
                 val asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}"
                 val cuerpoHtml = """
                     <html><body>
                     <p>Estimado/a,</p>
-                    <p>Adjunto encontrará el informe de la inspección y el presupuesto de reparación
+                    <p>Adjunto encontrará el informe de la inspección
                     para el <strong>siniestro N° ${inspeccion.siniestro}</strong>.</p>
                     <table border="1" cellpadding="6" cellspacing="0">
                         <tr><th>RUT Cliente</th><td>${inspeccion.rut}</td></tr>
@@ -170,21 +179,17 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                         <tr><th>Inspector Asignado</th><td>${inspeccion.rutInspector}</td></tr>
                     </table>
                     <br/>
-                    <p><strong>Documentos adjuntos:</strong></p>
+                    <p><strong>Documento adjunto:</strong></p>
                     <ul>
                         <li>Informe de Inspección (PDF)</li>
-                        ${if (excelResult?.uri != null) "<li>Presupuesto de Reparación (Excel)</li>" else ""}
                     </ul>
                     <p>Saludos cordiales,<br/><strong>Equipo Ferji Inspecciones</strong></p>
                     </body></html>
                 """.trimIndent()
 
-                val cc = listOf("patriciofernande@gmail.com")
-                    .filterNot { it.equals(destinatario, ignoreCase = true) }
-                    .ifEmpty { null }
-
+                Log.d(TAG, "Enviando email a: $destinatarios, CC: $cc")
                 val resultado = emailService.enviarConAdjuntos(
-                    destinatarios = listOf(destinatario),
+                    destinatarios = destinatarios,
                     cc = cc,
                     asunto = asunto,
                     cuerpoHtml = cuerpoHtml,
@@ -193,9 +198,9 @@ class ReenvioInspeccionesViewModel @Inject constructor(
 
                 when (resultado) {
                     is EmailService.EmailResult.Success -> {
-                        Log.i(TAG, "Email enviado a $destinatario")
+                        Log.i(TAG, "Email enviado a $destinatarios")
                         _reenvioState.value = ReenvioState(
-                            mensaje = "✅ Enviado a $destinatario\nSiniestro: ${inspeccion.siniestro}",
+                            mensaje = "✅ Inspección enviada correctamente\nSiniestro: ${inspeccion.siniestro}",
                             isError = false
                         )
                     }

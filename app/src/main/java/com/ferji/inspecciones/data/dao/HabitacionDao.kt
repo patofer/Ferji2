@@ -25,6 +25,9 @@ interface HabitacionDao {
     @Query("DELETE FROM habitaciones WHERE inspeccion_id = :inspeccionId")
     suspend fun deleteByInspeccionId(inspeccionId: Long)
 
-    @Query("SELECT * FROM habitaciones WHERE inspeccion_id = :idDeInspeccion") // Asume que la columna se llama 'inspeccionId'
+    @Query("SELECT * FROM habitaciones WHERE inspeccion_id = :idDeInspeccion")
     suspend fun getHabitacionesPorInspeccionId(idDeInspeccion: Long): List<HabitacionEntity>
+
+    @Query("SELECT COUNT(*) FROM habitaciones WHERE inspeccion_id = :inspeccionId")
+    suspend fun contarHabitaciones(inspeccionId: Long): Int
 }

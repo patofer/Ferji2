@@ -203,7 +203,7 @@ fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modif
 
         OutlinedTextField(
             value = viewModel.rutInspector,
-            onValueChange = { newValue -> viewModel.onRutInspectorChange(newValue) },
+            onValueChange = { },
             label = { Text("RUT Inspector *") },
             leadingIcon = {
                 Icon(Icons.Outlined.Engineering, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -211,28 +211,17 @@ fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modif
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-            isError = run {
-                val rutInsp = viewModel.rutInspector
-                val isNotBlank = rutInsp.isNotBlank()
-                val isValid = viewModel.isRutInspectorValid
-                val showError = isNotBlank && !isValid
-                Log.d("PantallaNuevaInsp_UI", "RUT_INSP isError Check: value='${rutInsp}', isNotBlank=${isNotBlank}, isRutInspectorValid=${isValid}, showError=${showError}")
-                showError
-            },
+            readOnly = true,
+            enabled = false,
+            isError = false,
             supportingText = {
-                if (viewModel.rutInspector.isNotBlank() && !viewModel.isRutInspectorValid) {
-                    Log.d("PantallaNuevaInsp_UI", "RUT_INSP SupportingText: Mostrando mensaje de error.")
-                    Text("RUT chileno inválido")
-                } else {
-                    Log.d("PantallaNuevaInsp_UI", "RUT_INSP SupportingText: NO mostrando mensaje de error.")
-                }
+                Text("Asignado automáticamente desde su sesión")
             }
         )
 
                     OutlinedTextField(
                         value = viewModel.mail,
-                        onValueChange = { viewModel.onMailChange(it) },
+                        onValueChange = { },
                         label = { Text("Mail Inspector *") },
                         leadingIcon = {
                             Icon(Icons.Outlined.Email, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -240,12 +229,11 @@ fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modif
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        isError = viewModel.mail.isNotBlank() && !viewModel.isMailValid,
+                        readOnly = true,
+                        enabled = false,
+                        isError = false,
                         supportingText = {
-                            if (viewModel.mail.isNotBlank() && !viewModel.isMailValid) {
-                                Text("Formato de email inválido")
-                            }
+                            Text("Asignado automáticamente desde su sesión")
                         }
                     )
                 }

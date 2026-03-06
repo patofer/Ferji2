@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ferji.inspecciones.data.model.UserEntity
 // --- 1. AÑADIR IMPORTACIONES NECESARIAS ---
+import com.ferji.inspecciones.data.repository.EmailSettingsRepository
 import com.ferji.inspecciones.data.repository.PartidaRepository
 import com.ferji.inspecciones.data.repository.UserRepository
 import com.google.firebase.auth.FirebaseAuth
@@ -19,8 +20,9 @@ import javax.inject.Inject
 class LoginViewModel @Inject constructor(
     // --- 2. INYECTAR LAS DEPENDENCIAS ADICIONALES ---
     private val userRepository: UserRepository,
-    private val partidaRepository: PartidaRepository, // Para sincronizar datos
-    private val firebaseAuth: FirebaseAuth           // Para autenticar
+    private val partidaRepository: PartidaRepository,
+    private val firebaseAuth: FirebaseAuth,
+    private val emailSettingsRepository: EmailSettingsRepository
 ) : ViewModel() {
 
     private val _loginSuccessEvent = MutableSharedFlow<Unit>()
@@ -70,6 +72,10 @@ class LoginViewModel @Inject constructor(
                 // Ahora que `request.auth` NO es null, esta llamada funcionará.
                 Log.d("LoginViewModel", "Sincronizando partidas principales...")
                 partidaRepository.sincronizarCatalogoCompleto()
+
+                // --- Inicializar configuración de emails en Firestore si no existe ---
+                Log.d("LoginViewModel", "Inicializando configuración de emails...")
+                emailSettingsRepository.inicializarSiNoExiste()
 
                 // --- 5. LÓGICA ORIGINAL: GUARDAR USUARIO Y NAVEGAR ---
                 // Mantenemos tu lógica de guardar el usuario en la sesión local.
