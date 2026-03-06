@@ -5,18 +5,23 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -24,7 +29,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ferji.inspecciones.data.model.InspeccionEntity
-import com.ferji.inspecciones.ui.theme.FerjiTheme
+import com.ferji.inspecciones.ui.components.FerjiEmptyState
+import com.ferji.inspecciones.ui.components.FerjiInfoRow
+import com.ferji.inspecciones.ui.components.FerjiTitleBar
+import com.ferji.inspecciones.ui.theme.*
 import com.ferji.inspecciones.viewmodels.ReenvioInspeccionesViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import java.text.SimpleDateFormat
@@ -64,7 +72,6 @@ fun PantallaReenvioInspecciones(
     val reenvioState by viewModel.reenvioState.collectAsState()
     val context = LocalContext.current
 
-    // Mostrar Toast al recibir mensaje
     LaunchedEffect(reenvioState.mensaje) {
         reenvioState.mensaje?.let { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
@@ -75,16 +82,19 @@ fun PantallaReenvioInspecciones(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Reenviar Inspección") },
+                title = {
+                    FerjiTitleBar(
+                        subtitle = "Reenviar Inspección",
+                        compact = true
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
         }
@@ -94,16 +104,17 @@ fun PantallaReenvioInspecciones(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // ── Campo de búsqueda ──
+            // Barra de búsqueda mejorada
             OutlinedTextField(
                 value = textoBusqueda,
                 onValueChange = { viewModel.onBusquedaChange(it) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = Spacing.base, vertical = Spacing.md),
                 placeholder = { Text("Buscar por siniestro, RUT, dirección...") },
                 leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Buscar")
+                    Icon(Icons.Default.Search, contentDescription = "Buscar",
+                        tint = MaterialTheme.colorScheme.primary)
                 },
                 trailingIcon = {
                     if (textoBusqueda.isNotEmpty()) {
@@ -112,43 +123,46 @@ fun PantallaReenvioInspecciones(
                         }
                     }
                 },
-                singleLine = true
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
             )
 
-            // ── Contador de resultados ──
-            Text(
-                text = "${inspecciones.size} inspección(es) encontrada(s)",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                fontSize = 13.sp,
-                color = Color.Gray
-            )
+            // Contador con estilo
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.base, vertical = Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.outline
+                )
+                Text(
+                    text = "${inspecciones.size} inspección(es) encontrada(s)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
-            HorizontalDivider()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            // ── Lista de inspecciones ──
             if (inspecciones.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("📭", fontSize = 48.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            if (textoBusqueda.isNotEmpty()) "No se encontraron resultados"
+                FerjiEmptyState(
+                    icon = "📭",
+                    title = if (textoBusqueda.isNotEmpty()) "No se encontraron resultados"
                             else "No hay inspecciones registradas",
-                            fontSize = 16.sp,
-                            color = Color.Gray
-                        )
-                    }
-                }
+                    subtitle = if (textoBusqueda.isNotEmpty()) "Intenta con otro término de búsqueda"
+                               else "Las inspecciones completadas aparecerán aquí"
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(horizontal = Spacing.base, vertical = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
                     items(inspecciones, key = { it.id }) { inspeccion ->
                         TarjetaInspeccionReenvio(
@@ -175,69 +189,103 @@ fun TarjetaInspeccionReenvio(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.level1)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Fila superior: Siniestro + Fecha
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Siniestro: ${inspeccion.siniestro}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = dateFormat.format(inspeccion.fechaCreacion),
-                    fontSize = 11.sp,
-                    color = Color.Gray
-                )
-            }
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Franja de color lateral
+            Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
+                    .background(FerjiOrange)
+            )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Datos de la inspección
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.weight(1f)) {
-                    DatoInspeccion(label = "RUT Cliente", valor = inspeccion.rut)
-                    DatoInspeccion(label = "Inspector", valor = inspeccion.rutInspector)
-                    DatoInspeccion(label = "Dirección", valor = inspeccion.direccion)
-                    DatoInspeccion(label = "Email", valor = inspeccion.mail)
+            Column(modifier = Modifier.weight(1f).padding(Spacing.md)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(FerjiOrangeLight),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.Assignment,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = FerjiOrange
+                            )
+                        }
+                        Text(
+                            text = inspeccion.siniestro,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
+                    Text(
+                        text = dateFormat.format(inspeccion.fechaCreacion),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(Spacing.sm))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(Spacing.sm))
 
-            // Botón de enviar
-            Button(
-                onClick = onReenviar,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading && !isOtroEnviando,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFE67E22)
-                )
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
+                FerjiInfoRow(label = "RUT", value = inspeccion.rut)
+                FerjiInfoRow(label = "Inspector", value = inspeccion.rutInspector)
+                FerjiInfoRow(label = "Dirección", value = inspeccion.direccion)
+                FerjiInfoRow(label = "Email", value = inspeccion.mail)
+
+                Spacer(modifier = Modifier.height(Spacing.md))
+
+                Button(
+                    onClick = onReenviar,
+                    modifier = Modifier.fillMaxWidth().height(ComponentSize.buttonHeightSmall),
+                    enabled = !isLoading && !isOtroEnviando,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = FerjiOrange
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Enviando...", fontWeight = FontWeight.Bold)
-                } else {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Enviar",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Enviar PDF + Presupuesto", fontWeight = FontWeight.Bold)
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.sm))
+                        Text("Enviando...",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Enviar",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.sm))
+                        Text("Enviar PDF + Presupuesto",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
@@ -246,19 +294,6 @@ fun TarjetaInspeccionReenvio(
 
 @Composable
 private fun DatoInspeccion(label: String, valor: String) {
-    Row(modifier = Modifier.padding(vertical = 1.dp)) {
-        Text(
-            text = "$label: ",
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.Gray
-        )
-        Text(
-            text = valor,
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
+    FerjiInfoRow(label = label, value = valor)
 }
 

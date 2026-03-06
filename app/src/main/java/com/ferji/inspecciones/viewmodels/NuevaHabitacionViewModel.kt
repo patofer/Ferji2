@@ -99,6 +99,11 @@ class NuevaHabitacionViewModel @Inject constructor(
     }
 
     // --- Métodos para actualizar el estado desde la UI ---
+    fun reintentarCargaCategorias() {
+        Log.d(TAG, "Reintentando carga de categorías...")
+        loadCategorias()
+    }
+
     fun onNombreChange(nombre: String) { _state.update { it.copy(nombreHabitacion = nombre) } }
     fun onAltoChange(alto: Int) { _state.update { it.copy(alto = alto) } }
     fun onLargoChange(largo: Int) { _state.update { it.copy(largo = largo) } }

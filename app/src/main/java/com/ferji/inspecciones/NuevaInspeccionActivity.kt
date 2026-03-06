@@ -22,8 +22,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -37,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.ferji.inspecciones.ui.components.PdfGenerationResult
+import com.ferji.inspecciones.ui.components.FerjiTitleBar
 import com.ferji.inspecciones.ui.events.NuevaInspeccionScreenUiState
 import com.ferji.inspecciones.ui.events.NuevaInspeccionUiEvent
 import com.ferji.inspecciones.ui.theme.FerjiTheme
@@ -108,13 +113,21 @@ class NuevaInspeccionActivity : ComponentActivity() {
                     topBar = {
                         TopAppBar(
                             title = {
-                                Text(
-                                    if (uiState.isFinalizingAndNavigating) {
+                                FerjiTitleBar(
+                                    subtitle = if (uiState.isFinalizingAndNavigating) {
                                         "Procesando Inspección"
                                     } else {
                                         "Nueva Inspección"
-                                    }
+                                    },
+                                    compact = true
                                 )
+                            },
+                            navigationIcon = {
+                                if (!uiState.isFinalizingAndNavigating) {
+                                    IconButton(onClick = { finish() }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                                    }
+                                }
                             },
                             actions = {
                                 if (uiState.isLoadingGlobal && !uiState.isFinalizingAndNavigating) {
@@ -243,7 +256,7 @@ class NuevaInspeccionActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 val file = File(path)
                 if (file.exists()) {
-                    val authority = "${applicationContext.packageName}.fileprovider"
+                    val authority = "${applicationContext.packageName}.provider"
                     try {
                         FileProvider.getUriForFile(this@NuevaInspeccionActivity, authority, file)
                     } catch (e: IllegalArgumentException) {

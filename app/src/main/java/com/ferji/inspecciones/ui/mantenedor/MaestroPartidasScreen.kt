@@ -4,20 +4,26 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ferji.inspecciones.data.model.PartidaNaturaleza
 import com.ferji.inspecciones.data.model.PartidaPrincipalEntity
-// --- IMPORTS NUEVOS ---
 import com.ferji.inspecciones.data.model.TipoSuperficie
+import com.ferji.inspecciones.ui.components.FerjiEmptyState
+import com.ferji.inspecciones.ui.components.FerjiStatusBadge
+import com.ferji.inspecciones.ui.theme.*
 import com.ferji.inspecciones.viewmodels.PartidaPrincipalViewModel
 
 /**
@@ -38,57 +44,108 @@ fun MaestroPartidasScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Maestro de Partidas") },
+                title = {
+                    Text("Maestro de Partidas", style = MaterialTheme.typography.titleLarge)
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = {
-                partidaAEditar = null
-                showDialog = true
-            }) {
-                Icon(Icons.Default.Add, contentDescription = "Añadir Partida Principal")
+            ExtendedFloatingActionButton(
+                onClick = {
+                    partidaAEditar = null
+                    showDialog = true
+                },
+                shape = RoundedCornerShape(16.dp),
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(Spacing.sm))
+                Text("Nueva Partida")
             }
         }
     ) { padding ->
         if (partidas.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("No hay partidas. Añade una con el botón '+'.")
-            }
+            FerjiEmptyState(
+                icon = "📋",
+                title = "Sin partidas",
+                subtitle = "Añade una con el botón '+'",
+                modifier = Modifier.padding(padding)
+            )
         } else {
-            LazyColumn(modifier = Modifier.padding(padding)) {
+            LazyColumn(
+                modifier = Modifier.padding(padding),
+                contentPadding = PaddingValues(horizontal = Spacing.base, vertical = Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
                 items(partidas, key = { it.id }) { partida ->
-                    ListItem(
-                        headlineContent = { Text(partida.nombre) },
-                        // Muestra el tipo de superficie en el detalle del ítem
-                        supportingContent = { Text("Tipo: ${partida.tipoSuperficie}") },
-                        modifier = Modifier.clickable {
-                            onPartidaClick(partida.id, partida.nombre)
-                        },
-                        trailingContent = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = {
-                                    partidaAEditar = partida
-                                    showDialog = true
-                                }) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Editar nombre")
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPartidaClick(partida.id, partida.nombre) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.level1)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(Spacing.md),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    partida.nombre,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(Spacing.xs))
+                                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                                    FerjiStatusBadge(
+                                        text = partida.tipoSuperficie ?: "—",
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    FerjiStatusBadge(
+                                        text = if (partida.naturaleza == PartidaNaturaleza.FIJA) "Fija" else "Variable",
+                                        color = if (partida.naturaleza == PartidaNaturaleza.FIJA) FerjiOrange else Tertiary40
+                                    )
                                 }
-                                IconButton(onClick = { viewModel.eliminarPartida(partida) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error)
-                                }
-                                Icon(Icons.Default.ChevronRight, contentDescription = "Ver detalles")
                             }
+                            IconButton(onClick = {
+                                partidaAEditar = partida
+                                showDialog = true
+                            }) {
+                                Icon(
+                                    Icons.Outlined.Edit,
+                                    contentDescription = "Editar",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = { viewModel.eliminarPartida(partida) }) {
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    contentDescription = "Eliminar",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = "Ver detalles",
+                                tint = MaterialTheme.colorScheme.outline
+                            )
                         }
-                    )
-                    Divider()
+                    }
                 }
+                item { Spacer(modifier = Modifier.height(80.dp)) } // Space for FAB
             }
         }
     }

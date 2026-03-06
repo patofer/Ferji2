@@ -4,35 +4,35 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Blinds
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat.startActivity
 import com.ferji.inspecciones.ui.actividades.MaestroPartidasActivity
-import com.ferji.inspecciones.ui.theme.FerjiTheme
-import androidx.activity.viewModels
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import com.ferji.inspecciones.ui.components.FerjiMenuCard
+import com.ferji.inspecciones.ui.components.FerjiSectionHeader
+import com.ferji.inspecciones.ui.components.FerjiTitleBar
+import com.ferji.inspecciones.ui.theme.*
 import com.ferji.inspecciones.viewmodels.MenuPrincipalViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
-
-@AndroidEntryPoint // <-- 1. AÑADE ESTA ANOTACIÓN
+@AndroidEntryPoint
 class MenuPrincipalActivity : ComponentActivity() {
 
-    // 2. Inyecta tu ViewModel usando Hilt
     private val viewModel: MenuPrincipalViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,135 +51,127 @@ class MenuPrincipalActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PantallaMenuPrincipal(esAdministrador: Boolean) {
     val context = LocalContext.current
 
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(30.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top
-    ) {
-        Spacer(modifier = Modifier.height(40.dp))
-        Text(
-            text = "Menú Principal",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- MENÚS VISIBLES PARA TODOS LOS ROLES ---
-
-        Button(
-            onClick = {
-                val intent = Intent(context, NuevaInspeccionActivity::class.java)
-                startActivity(context, intent, null)
-            },
-            modifier = Modifier.fillMaxWidth().height(60.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            Text("Nueva Inspección", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                val intent = Intent(context, ListaInspeccionesActivity::class.java)
-                context.startActivity(intent)
-            },
-            modifier = Modifier.fillMaxWidth().height(60.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-        ) {
-            Text("Inspecciones Pendientes", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- 5. LÓGICA CONDICIONAL PARA MOSTRAR BOTONES DE ADMINISTRADOR ---
-        if (esAdministrador) {
-            // Botón para el Maestro de Partidas
-            Button(
-                onClick = {
-                    val intent = Intent(context, MaestroPartidasActivity::class.java)
-                    context.startActivity(intent)
+    Scaffold(
+        topBar = {
+            LargeTopAppBar(
+                title = {
+                    FerjiTitleBar(subtitle = "Menú Principal")
                 },
-                modifier = Modifier.fillMaxWidth().height(60.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7D5260))
-            ) {
-                Icon(Icons.Default.Blinds, contentDescription = "Maestro de Partidas")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Maestro de Partidas", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                actions = {
+                    IconButton(onClick = { /* TODO: Settings */ }) {
+                        Icon(
+                            Icons.Outlined.Settings,
+                            contentDescription = "Configuración",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.largeTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            // ═══ SECCIÓN: Inspecciones ═══
+            FerjiSectionHeader(title = "Inspecciones")
+
+            FerjiMenuCard(
+                title = "Nueva Inspección",
+                subtitle = "Crear una inspección de siniestro",
+                icon = Icons.Filled.AddCircle,
+                gradientColors = listOf(Primary40, Primary30),
+                onClick = {
+                    val intent = Intent(context, NuevaInspeccionActivity::class.java)
+                    startActivity(context, intent, null)
+                }
+            )
+
+            FerjiMenuCard(
+                title = "Inspecciones Pendientes",
+                subtitle = "Ver inspecciones guardadas",
+                icon = Icons.Outlined.Assignment,
+                gradientColors = listOf(Secondary40, Secondary30),
+                onClick = {
+                    val intent = Intent(context, ListaInspeccionesActivity::class.java)
+                    context.startActivity(intent)
+                }
+            )
+
+            FerjiMenuCard(
+                title = "Enviar Inspección",
+                subtitle = "Reenviar PDF y presupuesto",
+                icon = Icons.AutoMirrored.Filled.Send,
+                gradientColors = listOf(FerjiOrange, Color(0xFFD35400)),
+                onClick = {
+                    val intent = Intent(context, ReenvioInspeccionesActivity::class.java)
+                    context.startActivity(intent)
+                }
+            )
+
+            FerjiMenuCard(
+                title = "Historial",
+                subtitle = "Inspecciones completadas",
+                icon = Icons.Outlined.History,
+                gradientColors = listOf(Tertiary40, Tertiary30),
+                onClick = { /* TODO: Historial */ }
+            )
+
+            // ═══ SECCIÓN: Administración (solo admin) ═══
+            if (esAdministrador) {
+                Spacer(modifier = Modifier.height(Spacing.sm))
+                FerjiSectionHeader(title = "Administración")
+
+                FerjiMenuCard(
+                    title = "Maestro de Partidas",
+                    subtitle = "Categorías y tipos de daño",
+                    icon = Icons.Outlined.Category,
+                    gradientColors = listOf(Color(0xFF7D5260), Color(0xFF6B4450)),
+                    onClick = {
+                        val intent = Intent(context, MaestroPartidasActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                )
+
+                FerjiMenuCard(
+                    title = "Mantenedor de Precios",
+                    subtitle = "Gestionar precios unitarios",
+                    icon = Icons.Outlined.PriceChange,
+                    gradientColors = listOf(Color(0xFF625B71), Color(0xFF514A5F)),
+                    onClick = {
+                        val intent = Intent(context, MantenedorPreciosActivity::class.java)
+                        context.startActivity(intent)
+                    }
+                )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Botón para el mantenedor de precios
-            Button(
-                onClick = {
-                    val intent = Intent(context, MantenedorPreciosActivity::class.java)
-                    context.startActivity(intent)
-                },
-                modifier = Modifier.fillMaxWidth().height(60.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF625b71))
-            ) {
-                Icon(Icons.Default.Build, contentDescription = "Mantenedor")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Mantenedor precios", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // --- CONTINUACIÓN DEL MENÚ PARA TODOS ---
-
-        // Botón para reenviar inspecciones (PDF + Presupuesto)
-        Button(
-            onClick = {
-                val intent = Intent(context, ReenvioInspeccionesActivity::class.java)
-                context.startActivity(intent)
-            },
-            modifier = Modifier.fillMaxWidth().height(60.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE67E22))
-        ) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar")
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Enviar Inspección", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = { /* Acción para ver historial */ },
-            modifier = Modifier.fillMaxWidth().height(60.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-        ) {
-            Text("Historial de Inspecciones", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(Spacing.xl))
         }
     }
 }
 
-
-// --- 6. ACTUALIZA LAS PREVIEWS PARA PROBAR AMBOS CASOS ---
-
-@Preview(showBackground = true, name = "Vista como Administrador")
+@Preview(showBackground = true, name = "Admin")
 @Composable
 fun PantallaMenuAdminPreview() {
-    FerjiTheme {
-        // Le pasamos 'true' para simular la vista de admin
-        PantallaMenuPrincipal(esAdministrador = true)
-    }
+    FerjiTheme { PantallaMenuPrincipal(esAdministrador = true) }
 }
 
-@Preview(showBackground = true, name = "Vista como Usuario Normal")
+@Preview(showBackground = true, name = "Usuario")
 @Composable
 fun PantallaMenuUsuarioPreview() {
-    FerjiTheme {
-        // Le pasamos 'false' para simular la vista de un usuario no-admin
-        PantallaMenuPrincipal(esAdministrador = false)
-    }
+    FerjiTheme { PantallaMenuPrincipal(esAdministrador = false) }
 }
+
