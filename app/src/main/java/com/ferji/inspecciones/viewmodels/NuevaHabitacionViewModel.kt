@@ -165,6 +165,21 @@ class NuevaHabitacionViewModel @Inject constructor(
             if (finalizarDespues) _preparandoParaFinalizar.value = false
             return
         }
+        if (currentState.alto <= 0) {
+            _guardadoState.value = GuardadoState.Error("El alto de la habitación es obligatorio.")
+            if (finalizarDespues) _preparandoParaFinalizar.value = false
+            return
+        }
+        if (currentState.largo <= 0) {
+            _guardadoState.value = GuardadoState.Error("El largo de la habitación es obligatorio.")
+            if (finalizarDespues) _preparandoParaFinalizar.value = false
+            return
+        }
+        if (currentState.ancho <= 0) {
+            _guardadoState.value = GuardadoState.Error("El ancho de la habitación es obligatorio.")
+            if (finalizarDespues) _preparandoParaFinalizar.value = false
+            return
+        }
         if (descripcionesDanos.isEmpty()) {
             _guardadoState.value = GuardadoState.Error("Por favor, seleccione al menos un tipo de daño.")
             if (finalizarDespues) _preparandoParaFinalizar.value = false
@@ -214,7 +229,12 @@ class NuevaHabitacionViewModel @Inject constructor(
     }
 
     fun intentarFinalizarInspeccion() {
-        if (state.value.nombreHabitacion.isNotBlank() || obtenerDescripcionesCompletasDeDanosParaGuardar().isNotEmpty() || state.value.fotosTomadas.isNotEmpty()) {
+        val s = state.value
+        val tieneDatos = s.nombreHabitacion.isNotBlank() ||
+                obtenerDescripcionesCompletasDeDanosParaGuardar().isNotEmpty() ||
+                s.fotosTomadas.isNotEmpty() ||
+                s.alto > 0 || s.largo > 0 || s.ancho > 0
+        if (tieneDatos) {
             _preparandoParaFinalizar.value = true
             guardarHabitacionConEstado(finalizarDespues = true)
         } else {

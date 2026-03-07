@@ -291,24 +291,9 @@ object PdfGenerator {
             }
 
             // ═══════════════════════════════════════════════════════════════
-            //  SECCIÓN DE PRESUPUESTO DETALLADO
+            //  NOTA: El presupuesto detallado se genera únicamente en el
+            //  archivo Excel (ExcelGenerator). NO se incluye en el PDF.
             // ═══════════════════════════════════════════════════════════════
-            if (partidaRepository != null && habitaciones.isNotEmpty()) {
-                try {
-                    val excelGenerator = ExcelGenerator(context)
-                    val presupuesto = excelGenerator.recopilarDatos(habitaciones, partidaRepository)
-
-                    if (presupuesto.habitaciones.isNotEmpty() || presupuesto.lineasFijasGlobales.isNotEmpty()) {
-                        addPresupuestoDetallado(document, presupuesto, titleFont, regularFont)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error al generar sección de presupuesto en PDF: ${e.message}", e)
-                    document.add(
-                        Paragraph("Error al generar el detalle del presupuesto.")
-                            .setFont(regularFont).setFontSize(10f).setItalic()
-                    )
-                }
-            }
 
             document.close()
             Log.i(TAG, "PDF generado: $finalFileName. Uri: $fileUri, Path: ${legacyFile?.absolutePath}")
