@@ -125,15 +125,6 @@ fun PantallaMenuPrincipal(esAdministrador: Boolean) {
                 }
             )
 
-            // TODO: Descomentar cuando se implemente la pantalla de Historial
-            // FerjiMenuCard(
-            //     title = "Historial",
-            //     subtitle = "Inspecciones completadas",
-            //     icon = Icons.Outlined.History,
-            //     gradientColors = listOf(Tertiary40, Tertiary30),
-            //     onClick = { /* TODO: Historial */ }
-            // )
-
             // ═══ SECCIÓN: Administración (solo admin) ═══
             if (esAdministrador) {
                 Spacer(modifier = Modifier.height(Spacing.sm))
@@ -189,4 +180,3 @@ fun PantallaMenuAdminPreview() {
 fun PantallaMenuUsuarioPreview() {
     FerjiTheme { PantallaMenuPrincipal(esAdministrador = false) }
 }
-
