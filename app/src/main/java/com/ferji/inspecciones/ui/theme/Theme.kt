@@ -119,12 +119,18 @@ fun FerjiTheme(
         else -> FerjiLightColorScheme
     }
 
-    // Actualizar status bar color
+    // Actualizar status bar color según el tema
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
+            // En Dark Mode: status bar oscuro con iconos claros
+            // En Light Mode: status bar con color primary e iconos claros
+            window.statusBarColor = if (darkTheme) {
+                colorScheme.surface.toArgb()
+            } else {
+                colorScheme.primary.toArgb()
+            }
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
     }

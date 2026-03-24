@@ -271,6 +271,34 @@ fun PantallaConfiguracion(
                                 onCheckedChange = viewModel::onEnviarPresupuestoAlInspectorChange
                             )
                         }
+
+                        HorizontalDivider()
+
+                        // Toggle: Enviar Imágenes al Inspector
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Enviar Imágenes al Inspector",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "El inspector recibirá las fotos de la inspección",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = state.enviarImagenesAlInspector,
+                                onCheckedChange = viewModel::onEnviarImagenesAlInspectorChange
+                            )
+                        }
                     }
                 }
 
@@ -309,6 +337,12 @@ fun PantallaConfiguracion(
                         val presupuestoStatus = if (state.enviarPresupuestoAlInspector) "Sí" else "No"
                         Text(
                             "Presupuesto al inspector: $presupuestoStatus",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        val imagenesStatus = if (state.enviarImagenesAlInspector) "Sí" else "No"
+                        Text(
+                            "Imágenes al inspector: $imagenesStatus",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }

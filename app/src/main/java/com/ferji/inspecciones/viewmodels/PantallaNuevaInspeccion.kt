@@ -40,7 +40,6 @@ import com.ferji.inspecciones.viewmodels.NuevaInspeccionViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modifier = Modifier, isLoading: Boolean) {
-    Log.d("PantallaNuevaInsp_UI", "--- PantallaNuevaInspeccion RECOMPONIENDO --- rutInsp: ${viewModel.rutInspector}, isValid: ${viewModel.isRutInspectorValid}")
     val uiState by viewModel.uiState.collectAsState()
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -273,7 +272,6 @@ fun PantallaNuevaInspeccion(viewModel: NuevaInspeccionViewModel, modifier: Modif
 
         Spacer(modifier = Modifier.height(Spacing.sm))
 
-        Log.d("NUEVA_INSPECCION_UI", "Navegando a NuevaHabitacion con ID ")
 
         // ═══ Botón Guardar con identidad FERJI ═══
         Button(

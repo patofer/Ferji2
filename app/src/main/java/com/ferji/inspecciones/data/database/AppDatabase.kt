@@ -1,11 +1,8 @@
 package com.ferji.inspecciones.data.database
 
-import android.content.Context
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ferji.inspecciones.data.dao.HabitacionDao
 import com.ferji.inspecciones.data.dao.InspeccionDao
 import com.ferji.inspecciones.data.dao.PartidaDao
@@ -28,7 +25,7 @@ import com.ferji.inspecciones.data.model.UserEntity
         UserEntity::class
     ],
     version = 17,
-    exportSchema = false // Recomendado mantener en false para desarrollo.
+    exportSchema = true // Recomendado para producción: permite auditar migraciones.
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -39,32 +36,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun partidaPrincipalDao(): PartidaPrincipalDao
     abstract fun userDao(): UserDao
 
-    companion object {
-        @Volatile
-        private var INSTANCE: AppDatabase? = null
-
-        fun getDatabase(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "ferji_inspecciones_db"
-                )
-                    .addCallback(object : RoomDatabase.Callback() {
-                        override fun onCreate(db: SupportSQLiteDatabase) {
-                            super.onCreate(db)
-                            // Código que se ejecuta cuando la BD se crea por primera vez.
-                            // Útil para pre-poblar datos.
-                        }
-                    })
-                    // fallbackToDestructiveMigration() es muy útil durante el desarrollo.
-                    // Borra y recrea la base de datos si aumentas la versión sin
-                    // proporcionar una migración, evitando crashes.
-                    .fallbackToDestructiveMigration()
-                    .build()
-                INSTANCE = instance
-                instance
-            }
-        }
-    }
+    // NOTA: El companion object con getDatabase() se ha eliminado porque la instancia
+    // se provee exclusivamente via Hilt (DatabaseModule.provideAppDatabase).
+    // Tener dos mecanismos de creación podía generar instancias duplicadas de la BD.
 }

@@ -157,6 +157,7 @@ class PartidaRepository @Inject constructor(
     // --- FUNCIONES DAO: Simplemente delegan la llamada al DAO correspondiente ---
 
     fun getPartidasDePrincipal(idPadre: Long): Flow<List<PartidaEntity>> = partidaDao.getPartidasDePrincipal(idPadre)
+    suspend fun getPartidaById(id: Long): PartidaEntity? = partidaDao.getPartidaById(id)
     suspend fun upsertPartida(partida: PartidaEntity) = partidaDao.upsert(partida)
     suspend fun deletePartida(partida: PartidaEntity) = partidaDao.deletePartida(partida)
     fun getAllPartidasPrincipales(): Flow<List<PartidaPrincipalEntity>> = partidaPrincipalDao.getAll()

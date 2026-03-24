@@ -4,7 +4,6 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ferji.inspecciones.data.dao.PartidaPrincipalDao
 import com.ferji.inspecciones.data.model.HabitacionEntity
 import com.ferji.inspecciones.data.model.PartidaNaturaleza
 import com.ferji.inspecciones.data.model.PartidaPrincipalEntity
@@ -22,7 +21,6 @@ import javax.inject.Inject
 @HiltViewModel
 class NuevaHabitacionViewModel @Inject constructor(
     private val habitacionRepository: HabitacionRepository,
-    private val partidaPrincipalDao: PartidaPrincipalDao,
     private val partidaRepository: PartidaRepository
 ) : ViewModel() {
 
@@ -79,7 +77,7 @@ class NuevaHabitacionViewModel @Inject constructor(
             }
 
             // 2. Cargar TODAS las partidas y filtrar VARIABLES
-            partidaPrincipalDao.getAll().collect { todas ->
+            partidaRepository.getAllPartidasPrincipales().collect { todas ->
                 Log.d(TAG, "══════════════════════════════════════")
                 Log.d(TAG, "TODAS las partidas principales en BD: ${todas.size}")
                 todas.forEach { pp ->
@@ -165,21 +163,17 @@ class NuevaHabitacionViewModel @Inject constructor(
             if (finalizarDespues) _preparandoParaFinalizar.value = false
             return
         }
-        if (currentState.alto <= 0) {
-            _guardadoState.value = GuardadoState.Error("El alto de la habitación es obligatorio.")
-            if (finalizarDespues) _preparandoParaFinalizar.value = false
-            return
-        }
         if (currentState.largo <= 0) {
-            _guardadoState.value = GuardadoState.Error("El largo de la habitación es obligatorio.")
+            _guardadoState.value = GuardadoState.Error("El largo es obligatorio.")
             if (finalizarDespues) _preparandoParaFinalizar.value = false
             return
         }
-        if (currentState.ancho <= 0) {
-            _guardadoState.value = GuardadoState.Error("El ancho de la habitación es obligatorio.")
+        if (currentState.alto <= 0) {
+            _guardadoState.value = GuardadoState.Error("El alto es obligatorio.")
             if (finalizarDespues) _preparandoParaFinalizar.value = false
             return
         }
+        // Nota: el ancho es opcional (ej: muros de fachada solo usan largo × alto)
         if (descripcionesDanos.isEmpty()) {
             _guardadoState.value = GuardadoState.Error("Por favor, seleccione al menos un tipo de daño.")
             if (finalizarDespues) _preparandoParaFinalizar.value = false

@@ -13,6 +13,9 @@ import com.ferji.inspecciones.data.model.InspeccionEntity
 import com.ferji.inspecciones.data.model.PartidaEntity
 import com.ferji.inspecciones.data.model.PartidaNaturaleza
 import com.ferji.inspecciones.data.repository.PartidaRepository
+import com.ferji.inspecciones.domain.model.AppResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.dhatim.fastexcel.BorderSide
 import org.dhatim.fastexcel.BorderStyle
 import org.dhatim.fastexcel.Workbook
@@ -26,6 +29,12 @@ import kotlin.math.roundToInt
 /**
  * Genera un presupuesto en Excel (.xlsx) basado en los datos de la inspección.
  *
+ * Principios aplicados:
+ * - Operaciones pesadas ejecutadas en [Dispatchers.IO] para no bloquear el hilo principal.
+ * - Uso de [AppResult] en lugar de retornar null para comunicar errores con contexto.
+ * - Separación de responsabilidades: recopilación de datos vs. escritura del archivo.
+ * - Constantes extraídas para facilitar configuración y mantenimiento.
+ *
  * Lógica:
  * 1. Por cada habitación se obtienen los daños seleccionados.
  * 2. Cada daño tiene partidas asociadas de naturaleza VARIABLE.
@@ -35,6 +44,27 @@ class ExcelGenerator(private val context: Context) {
 
     companion object {
         private const val TAG = "ExcelGenerator"
+
+        // ── Constantes de negocio (fácilmente configurables) ──
+        private const val PORCENTAJE_GASTOS_GENERALES = 0.25
+        private const val PORCENTAJE_IVA = 0.19
+
+        // ── Colores del Excel ──
+        private const val COLOR_HEADER = "34495E"
+        private const val COLOR_HABITACION = "2980B9"
+        private const val COLOR_SUBTOTAL = "27AE60"
+        private const val COLOR_GENERALES = "8E44AD"
+        private const val COLOR_DESGLOSE = "C0392B"
+        private const val COLOR_TOTAL_FINAL = "8B0000"
+        private const val COLOR_FILA_PAR = "FFFFFF"
+        private const val COLOR_FILA_IMPAR = "F5F5F5"
+        private const val COLOR_BLANCO = "FFFFFF"
+
+        // ── Datos de la empresa (idealmente vendrían de configuración remota) ──
+        private const val EMPRESA_NOMBRE = "CONSTRUCCIONES Y ALUMINIOS DEL MAULE"
+        private const val EMPRESA_DIRECCION = "CALLE 6 NORTE 2380 TALCA"
+        private const val EMPRESA_REGION = "REGION DEL MAULE"
+        private const val EMPRESA_TELEFONO = "TELÉFONO: +569320485044"
     }
 
     data class ExcelResult(
@@ -43,15 +73,20 @@ class ExcelGenerator(private val context: Context) {
         val fileName: String
     )
 
+    /**
+     * Genera el presupuesto Excel de forma segura en [Dispatchers.IO].
+     *
+     * @return [AppResult.Success] con el resultado del archivo, o [AppResult.Error] con detalles del fallo.
+     */
     suspend fun generarPresupuesto(
         inspeccion: InspeccionEntity,
         habitaciones: List<HabitacionEntity>,
         partidaRepository: PartidaRepository
-    ): ExcelResult? {
+    ): AppResult<ExcelResult> = withContext(Dispatchers.IO) {
         val fechaStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val fileName = "Presupuesto_${inspeccion.siniestro}_${fechaStr}.xlsx"
 
-        return try {
+        try {
             val presupuesto = recopilarDatos(habitaciones, partidaRepository)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -66,8 +101,10 @@ class ExcelGenerator(private val context: Context) {
                         escribirExcel(outputStream, inspeccion, presupuesto)
                     }
                     Log.i(TAG, "Excel generado en Descargas: $fileName")
-                    ExcelResult(uri = uri, file = null, fileName = fileName)
-                } else null
+                    AppResult.Success(ExcelResult(uri = uri, file = null, fileName = fileName))
+                } else {
+                    AppResult.Error("No se pudo crear el archivo en Descargas. Verifique permisos de almacenamiento.")
+                }
             } else {
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val file = File(downloadsDir, fileName)
@@ -75,11 +112,11 @@ class ExcelGenerator(private val context: Context) {
                     escribirExcel(outputStream, inspeccion, presupuesto)
                 }
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-                ExcelResult(uri = uri, file = file, fileName = fileName)
+                AppResult.Success(ExcelResult(uri = uri, file = file, fileName = fileName))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error generando Excel: ${e.message}", e)
-            null
+            AppResult.Error("Error generando presupuesto: ${e.localizedMessage}", e)
         }
     }
 
@@ -215,6 +252,16 @@ class ExcelGenerator(private val context: Context) {
      * las dimensiones de la habitación y el tipo de superficie de la partida principal.
      *
      * Dimensiones de la habitación están en centímetros (ej: 380 = 3.80 metros).
+     *
+     * Reglas de cálculo para M2:
+     * - Descripción contiene "MURO" y ancho = 0 → largo × alto (muro individual, ej: fachada)
+     * - Descripción contiene "MURO" y ancho > 0 → perímetro × alto: 2*(largo+ancho)*alto
+     * - Cualquier otra superficie                → largo × ancho (superficie de piso/cielo)
+     *
+     * Reglas para otras unidades:
+     * - ML y ancho = 0 → solo largo (metros lineales de un muro individual)
+     * - ML y ancho > 0 → perímetro: 2*(largo+ancho)
+     * - U, GL           → 1 unidad
      */
     private fun calcularCantidad(
         partida: PartidaEntity,
@@ -225,22 +272,36 @@ class ExcelGenerator(private val context: Context) {
         val largoM = habitacion.largo / 100.0
         val anchoM = habitacion.ancho / 100.0
 
-        // Verificar si la descripción de la partida HIJA contiene "muro"
         val esMuroPorDescripcionHija = partida.descripcion.uppercase().contains("MURO")
+        val tieneAncho = habitacion.ancho > 0
 
         return when (partida.unidad.uppercase()) {
             "M2" -> {
                 if (esMuroPorDescripcionHija) {
-                    2.0 * (largoM + anchoM) * altoM
+                    if (tieneAncho) {
+                        // Habitación completa: perímetro × alto (4 muros)
+                        2.0 * (largoM + anchoM) * altoM
+                    } else {
+                        // Muro individual (ej: fachada): largo × alto
+                        largoM * altoM
+                    }
                 } else {
-                    when (tipoSuperficie.uppercase()) {
-                        "PISO" -> largoM * anchoM
-                        "CIELO" -> largoM * anchoM
-                        else -> largoM * anchoM
+                    // Superficie plana (piso, cielo, etc.)
+                    if (tieneAncho) {
+                        largoM * anchoM
+                    } else {
+                        // Sin ancho: usar largo como única medida de superficie
+                        largoM * altoM
                     }
                 }
             }
-            "ML" -> 2.0 * (largoM + anchoM)
+            "ML" -> {
+                if (tieneAncho) {
+                    2.0 * (largoM + anchoM) // Perímetro completo
+                } else {
+                    largoM // Solo largo (muro individual)
+                }
+            }
             "U", "GL" -> 1.0
             else -> 1.0
         }
@@ -265,26 +326,26 @@ class ExcelGenerator(private val context: Context) {
         // Datos del siniestro (izquierda) + Datos de la empresa (derecha)
         val encabezadoRow = row
         ws.value(row, 0, "Siniestro:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.siniestro)
-        ws.value(row, 5, "CONSTRUCCIONES Y ALUMINIOS DEL MAULE"); ws.style(row, 5).bold().fontSize(11).set()
+        ws.value(row, 5, EMPRESA_NOMBRE); ws.style(row, 5).bold().fontSize(11).set()
         row++
         ws.value(row, 0, "RUT Cliente:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.rut)
-        ws.value(row, 5, "CALLE 6 NORTE 2380 TALCA"); ws.style(row, 5).fontSize(10).set()
+        ws.value(row, 5, EMPRESA_DIRECCION); ws.style(row, 5).fontSize(10).set()
         row++
         ws.value(row, 0, "Dirección:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.direccion)
-        ws.value(row, 5, "REGION DEL MAULE"); ws.style(row, 5).fontSize(10).set()
+        ws.value(row, 5, EMPRESA_REGION); ws.style(row, 5).fontSize(10).set()
         row++
         ws.value(row, 0, "Inspector:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.rutInspector)
-        ws.value(row, 5, "TELÉFONO: +569320485044"); ws.style(row, 5).fontSize(10).set()
+        ws.value(row, 5, EMPRESA_TELEFONO); ws.style(row, 5).fontSize(10).set()
         row++
         ws.value(row, 0, "Fecha:"); ws.style(row, 0).bold().set()
         ws.value(row, 1, SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())); row++
         row++
 
         // ── Cabecera de columnas ──
-        val headerCols = arrayOf("Descripción", "Alto", "Ancho", "Largo", "Medida", "Cantidad", "Precio Unitario", "Total")
+        val headerCols = arrayOf("Descripción", "Largo", "Ancho", "Alto", "Medida", "Cantidad", "Precio Unitario", "Total")
         for (c in headerCols.indices) {
             ws.value(row, c, headerCols[c])
-            ws.style(row, c).bold().fillColor("34495E").fontColor("FFFFFF")
+            ws.style(row, c).bold().fillColor(COLOR_HEADER).fontColor(COLOR_BLANCO)
                 .borderStyle(BorderSide.BOTTOM, BorderStyle.THIN).set()
         }
         row++
@@ -298,13 +359,13 @@ class ExcelGenerator(private val context: Context) {
             val largoM = hab.largoCm / 100.0
 
             ws.value(row, 0, hab.nombre)
-            ws.value(row, 1, redondear2(altoM))
-            ws.value(row, 2, redondear2(anchoM))
-            ws.value(row, 3, redondear2(largoM))
-            for (c in 0..7) { ws.style(row, c).bold().fillColor("2980B9").fontColor("FFFFFF").set() }
-            ws.style(row, 1).bold().fillColor("2980B9").fontColor("FFFFFF").format("0.00").set()
-            ws.style(row, 2).bold().fillColor("2980B9").fontColor("FFFFFF").format("0.00").set()
-            ws.style(row, 3).bold().fillColor("2980B9").fontColor("FFFFFF").format("0.00").set()
+            ws.value(row, 1, redondear2(largoM))
+            if (hab.anchoCm > 0) ws.value(row, 2, redondear2(anchoM)) // Vacío si no tiene ancho
+            ws.value(row, 3, redondear2(altoM))
+            for (c in 0..7) { ws.style(row, c).bold().fillColor(COLOR_HABITACION).fontColor(COLOR_BLANCO).set() }
+            ws.style(row, 1).bold().fillColor(COLOR_HABITACION).fontColor(COLOR_BLANCO).format("0.00").set()
+            ws.style(row, 2).bold().fillColor(COLOR_HABITACION).fontColor(COLOR_BLANCO).format("0.00").set()
+            ws.style(row, 3).bold().fillColor(COLOR_HABITACION).fontColor(COLOR_BLANCO).format("0.00").set()
             row++
 
             for ((index, linea) in hab.lineasVariables.withIndex()) {
@@ -313,7 +374,7 @@ class ExcelGenerator(private val context: Context) {
                 ws.value(row, 5, redondear2(linea.cantidad))
                 ws.value(row, 6, redondear2(linea.precioUnitario))
                 ws.value(row, 7, redondear2(linea.subtotal))
-                val fill = if (index % 2 != 0) "F5F5F5" else "FFFFFF"
+                val fill = if (index % 2 != 0) COLOR_FILA_IMPAR else COLOR_FILA_PAR
                 if (index % 2 != 0) { for (c in 0..7) { ws.style(row, c).fillColor(fill).set() } }
                 ws.style(row, 5).fillColor(fill).format("#,##0.00").set()
                 ws.style(row, 6).fillColor(fill).format("#,##0").set()
@@ -323,8 +384,8 @@ class ExcelGenerator(private val context: Context) {
 
             ws.value(row, 0, "Subtotal ${hab.nombre}")
             ws.value(row, 7, redondear2(hab.totalHabitacion))
-            for (c in 0..7) { ws.style(row, c).bold().fillColor("27AE60").fontColor("FFFFFF").set() }
-            ws.style(row, 7).bold().fillColor("27AE60").fontColor("FFFFFF").format("$ #,##0").set()
+            for (c in 0..7) { ws.style(row, c).bold().fillColor(COLOR_SUBTOTAL).fontColor(COLOR_BLANCO).set() }
+            ws.style(row, 7).bold().fillColor(COLOR_SUBTOTAL).fontColor(COLOR_BLANCO).format("$ #,##0").set()
             row += 2
         }
 
@@ -333,7 +394,7 @@ class ExcelGenerator(private val context: Context) {
         // ══════════════════════════════════════════
         if (presupuesto.lineasFijasGlobales.isNotEmpty()) {
             ws.value(row, 0, "GENERALES")
-            for (c in 0..7) { ws.style(row, c).bold().fillColor("8E44AD").fontColor("FFFFFF").set() }
+            for (c in 0..7) { ws.style(row, c).bold().fillColor(COLOR_GENERALES).fontColor(COLOR_BLANCO).set() }
             row++
 
             for ((index, linea) in presupuesto.lineasFijasGlobales.withIndex()) {
@@ -342,7 +403,7 @@ class ExcelGenerator(private val context: Context) {
                 ws.value(row, 5, redondear2(linea.cantidad))
                 ws.value(row, 6, redondear2(linea.precioUnitario))
                 ws.value(row, 7, redondear2(linea.subtotal))
-                val fill = if (index % 2 != 0) "F5F5F5" else "FFFFFF"
+                val fill = if (index % 2 != 0) COLOR_FILA_IMPAR else COLOR_FILA_PAR
                 if (index % 2 != 0) { for (c in 0..7) { ws.style(row, c).fillColor(fill).set() } }
                 ws.style(row, 5).fillColor(fill).format("#,##0.00").set()
                 ws.style(row, 6).fillColor(fill).format("#,##0").set()
@@ -352,51 +413,51 @@ class ExcelGenerator(private val context: Context) {
 
             ws.value(row, 0, "Subtotal Generales")
             ws.value(row, 7, redondear2(presupuesto.totalFijas))
-            for (c in 0..7) { ws.style(row, c).bold().fillColor("8E44AD").fontColor("FFFFFF").set() }
-            ws.style(row, 7).bold().fillColor("8E44AD").fontColor("FFFFFF").format("$ #,##0").set()
+            for (c in 0..7) { ws.style(row, c).bold().fillColor(COLOR_GENERALES).fontColor(COLOR_BLANCO).set() }
+            ws.style(row, 7).bold().fillColor(COLOR_GENERALES).fontColor(COLOR_BLANCO).format("$ #,##0").set()
             row += 2
         }
 
         // ═══ DESGLOSE FINAL ═══
         val costoDirecto = presupuesto.totalGeneral
-        val gastosGenerales = redondear2(costoDirecto * 0.25)
+        val gastosGenerales = redondear2(costoDirecto * PORCENTAJE_GASTOS_GENERALES)
         val costoNeto = redondear2(costoDirecto + gastosGenerales)
-        val iva = redondear2(costoNeto * 0.19)
+        val iva = redondear2(costoNeto * PORCENTAJE_IVA)
         val costoTotal = redondear2(costoNeto + iva)
 
         // COSTO DIRECTO DE OBRA
         ws.value(row, 0, "COSTO DIRECTO DE OBRA")
         ws.value(row, 7, redondear2(costoDirecto))
-        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").set() }
-        ws.style(row, 7).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").format("$ #,##0").set()
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor(COLOR_DESGLOSE).fontColor(COLOR_BLANCO).set() }
+        ws.style(row, 7).bold().fontSize(12).fillColor(COLOR_DESGLOSE).fontColor(COLOR_BLANCO).format("$ #,##0").set()
         row++
 
-        // GASTOS GENERALES Y UTILIDADES 25%
-        ws.value(row, 0, "GASTOS GENERALES Y UTILIDADES 25%")
+        // GASTOS GENERALES Y UTILIDADES
+        ws.value(row, 0, "GASTOS GENERALES Y UTILIDADES ${(PORCENTAJE_GASTOS_GENERALES * 100).toInt()}%")
         ws.value(row, 7, gastosGenerales)
-        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").set() }
-        ws.style(row, 7).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").format("$ #,##0").set()
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor(COLOR_DESGLOSE).fontColor(COLOR_BLANCO).set() }
+        ws.style(row, 7).bold().fontSize(12).fillColor(COLOR_DESGLOSE).fontColor(COLOR_BLANCO).format("$ #,##0").set()
         row++
 
         // COSTO NETO
         ws.value(row, 0, "COSTO NETO")
         ws.value(row, 7, costoNeto)
-        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").set() }
-        ws.style(row, 7).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").format("$ #,##0").set()
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor(COLOR_DESGLOSE).fontColor(COLOR_BLANCO).set() }
+        ws.style(row, 7).bold().fontSize(12).fillColor(COLOR_DESGLOSE).fontColor(COLOR_BLANCO).format("$ #,##0").set()
         row++
 
-        // IVA 19%
-        ws.value(row, 0, "IVA 19%")
+        // IVA
+        ws.value(row, 0, "IVA ${(PORCENTAJE_IVA * 100).toInt()}%")
         ws.value(row, 7, iva)
-        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").set() }
-        ws.style(row, 7).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").format("$ #,##0").set()
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor(COLOR_DESGLOSE).fontColor(COLOR_BLANCO).set() }
+        ws.style(row, 7).bold().fontSize(12).fillColor(COLOR_DESGLOSE).fontColor(COLOR_BLANCO).format("$ #,##0").set()
         row++
 
         // COSTO TOTAL EN $
         ws.value(row, 0, "COSTO TOTAL EN $")
         ws.value(row, 7, costoTotal)
-        for (c in 0..7) { ws.style(row, c).bold().fontSize(14).fillColor("8B0000").fontColor("FFFFFF").set() }
-        ws.style(row, 7).bold().fontSize(14).fillColor("8B0000").fontColor("FFFFFF").format("$ #,##0").set()
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(14).fillColor(COLOR_TOTAL_FINAL).fontColor(COLOR_BLANCO).set() }
+        ws.style(row, 7).bold().fontSize(14).fillColor(COLOR_TOTAL_FINAL).fontColor(COLOR_BLANCO).format("$ #,##0").set()
         row += 2
 
         // ═══ OBSERVACIONES ═══

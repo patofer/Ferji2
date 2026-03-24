@@ -25,12 +25,16 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(
-            context.applicationContext, // Es buena práctica usar applicationContext
+            context.applicationContext,
             AppDatabase::class.java,
-            "ferji_inspecciones_db" // <--- USA EL NOMBRE CONSISTENTE
+            "ferji_inspecciones_db"
         )
-            // .addMigrations(MIGRATION_X_Y, ...) // Si tuvieras migraciones explícitas
-            .fallbackToDestructiveMigration()  // <--- AÑADE ESTO AQUÍ
+            // ⚠️ PRODUCCIÓN: Reemplazar fallbackToDestructiveMigration() por migraciones
+            // explícitas antes del lanzamiento comercial. Esta estrategia BORRA TODOS
+            // LOS DATOS del usuario si se incrementa la versión de la BD sin migración.
+            // Ejemplo:
+            //   .addMigrations(MIGRATION_17_18, MIGRATION_18_19)
+            .fallbackToDestructiveMigration()
             .build()
     }
 

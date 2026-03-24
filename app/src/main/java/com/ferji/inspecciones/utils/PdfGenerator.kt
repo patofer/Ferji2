@@ -166,126 +166,126 @@ object PdfGenerator {
                         .setMarginTop(10f).setMarginBottom(8f)
                 )
 
-                val NUMERO_COLUMNAS_DETALLES = 4
-                val columnWidths = floatArrayOf(2f, 2f, 3f, 3f)
-                val table = Table(UnitValue.createPercentArray(columnWidths)).useAllAvailableWidth()
-
-                table.addHeaderCell(createHeaderCell("Habitación", titleFont))
-                table.addHeaderCell(createHeaderCell("Dimensiones (cm)", titleFont))
-                table.addHeaderCell(createHeaderCell("Daños", titleFont))
-                table.addHeaderCell(createHeaderCell("Observaciones", titleFont))
-
                 habitaciones.forEachIndexed { indexHab, habitacion ->
+                    // ═══ TABLA DE DATOS DE LA HABITACIÓN ═══
+                    val columnWidths = floatArrayOf(2f, 2f, 3f, 3f)
+                    val table = Table(UnitValue.createPercentArray(columnWidths)).useAllAvailableWidth()
+
+                    // Solo agregar headers en la primera habitación o al inicio de página nueva
+                    table.addHeaderCell(createHeaderCell("Habitación", titleFont))
+                    table.addHeaderCell(createHeaderCell("Dimensiones (cm)", titleFont))
+                    table.addHeaderCell(createHeaderCell("Daños", titleFont))
+                    table.addHeaderCell(createHeaderCell("Observaciones", titleFont))
+
                     table.addCell(createContentCell(habitacion.nombre, regularFont))
-                    val dimensionesStr = "Alto: ${habitacion.alto}\nLargo: ${habitacion.largo}\nAncho: ${habitacion.ancho}"
+                    val dimensionesParts = mutableListOf("Largo: ${habitacion.largo}")
+                    if (habitacion.ancho > 0) dimensionesParts.add("Ancho: ${habitacion.ancho}")
+                    dimensionesParts.add("Alto: ${habitacion.alto}")
+                    val dimensionesStr = dimensionesParts.joinToString("\n")
                     table.addCell(createContentCell(dimensionesStr, regularFont, TextAlignment.LEFT))
                     table.addCell(createContentCell(habitacion.getDanosList().joinToString("\n"), regularFont))
                     table.addCell(createContentCell(habitacion.comentarios, regularFont))
 
+                    document.add(table)
+
+                    // ═══ FOTOS DE LA HABITACIÓN (fuera de la tabla, con tamaño fijo) ═══
                     val listaDeRutasDeFotos: List<String> = habitacion.getFotosList()
-                    Log.d(TAG, "Habitación '${habitacion.nombre}': Iniciando procesamiento de fotos. Número de rutas: ${listaDeRutasDeFotos.size}")
+                    Log.d(TAG, "Habitación '${habitacion.nombre}': ${listaDeRutasDeFotos.size} fotos.")
 
                     if (listaDeRutasDeFotos.isNotEmpty()) {
-                        val fotoContainerCell = Cell(1, NUMERO_COLUMNAS_DETALLES)
-                            .setPadding(5f)
-                            .setBorderTop(SolidBorder(ColorConstants.LIGHT_GRAY, 0.5f))
-                            .setBorderBottom(SolidBorder(ColorConstants.LIGHT_GRAY, 0.5f))
-                            .setBorderLeft(null).setBorderRight(null)
+                        document.add(
+                            Paragraph("Fotos - ${habitacion.nombre}")
+                                .setFont(titleFont).setFontSize(9f)
+                                .setMarginTop(4f).setMarginBottom(4f)
+                                .setFontColor(DeviceRgb(100, 100, 100))
+                        )
 
-                        val FOTOS_POR_FILA_INTERNA = 3
-                        val internalFotoTableWidths = FloatArray(FOTOS_POR_FILA_INTERNA) { 1f }
-                        val fotosTableInterna = Table(UnitValue.createPercentArray(internalFotoTableWidths))
-                            .useAllAvailableWidth().setBorder(null)
+                        // Tamaño fijo para cada foto en puntos (≈ 5.3cm × 5.3cm)
+                        val FOTO_ANCHO_PTS = 150f
+                        val FOTO_ALTO_PTS = 150f
+                        val FOTOS_POR_FILA = 3
 
-                        var fotosEnFilaActualInterna = 0
-                        var bitmapRotado: Bitmap? = null // Mover fuera del forEach para reciclar en finally
+                        val fotosTableWidths = FloatArray(FOTOS_POR_FILA) { 1f }
+                        val fotosTable = Table(UnitValue.createPercentArray(fotosTableWidths))
+                            .useAllAvailableWidth()
+                            .setBorder(null)
+                            .setKeepTogether(false) // Permitir que la tabla se divida entre páginas
+
+                        var fotosEnFila = 0
+                        var bitmapRotado: Bitmap? = null
+
                         listaDeRutasDeFotos.forEachIndexed { index, fotoPathString ->
-                            Log.d(TAG, "Procesando foto ${index + 1}/${listaDeRutasDeFotos.size}: '$fotoPathString'")
-                            bitmapRotado = null // Resetear para cada foto
+                            bitmapRotado = null
                             if (fotoPathString.isNotBlank()) {
                                 try {
-                                    Log.d(TAG, "Intentando cargar y rotar: '$fotoPathString'")
-                                    bitmapRotado = cargarYRotarBitmap(fotoPathString, 150f, 150f) // Ajusta estos tamaños si es necesario
+                                    bitmapRotado = cargarYRotarBitmap(fotoPathString, 300f, 300f)
 
                                     if (bitmapRotado != null) {
-                                        Log.d(TAG, "Bitmap rotado obtenido para '$fotoPathString'. Dimensiones: ${bitmapRotado!!.width}x${bitmapRotado!!.height}")
                                         val stream = ByteArrayOutputStream()
-                                        Log.d(TAG, "Comprimiendo bitmap a JPEG para '$fotoPathString'...")
-                                        val successCompress = bitmapRotado!!.compress(Bitmap.CompressFormat.JPEG, 85, stream)
-                                        if (!successCompress) {
-                                            Log.w(TAG, "bitmapRotado.compress devolvió false para '$fotoPathString'")
-                                        }
+                                        bitmapRotado!!.compress(Bitmap.CompressFormat.JPEG, 85, stream)
                                         val imageBytes = stream.toByteArray()
-                                        Log.d(TAG, "Tamaño de imageBytes para '$fotoPathString': ${imageBytes.size}")
 
                                         if (imageBytes.isNotEmpty()) {
-                                            Log.d(TAG, "Creando ImageData para '$fotoPathString'")
                                             val imageData = ImageDataFactory.create(imageBytes)
                                             val image = Image(imageData)
-                                                .setAutoScale(true)
-                                                .setTextAlignment(TextAlignment.CENTER)
+                                                // Tamaño FIJO — no se encoge para caber en la página
+                                                .setWidth(FOTO_ANCHO_PTS)
+                                                .setHeight(FOTO_ALTO_PTS)
+                                                .setHorizontalAlignment(HorizontalAlignment.CENTER)
 
-                                            Log.d(TAG, "Añadiendo imagen a la celda para '$fotoPathString'")
-                                            val imageCell = Cell().add(image).setBorder(null).setPadding(2f).setTextAlignment(TextAlignment.CENTER)
-                                            fotosTableInterna.addCell(imageCell)
-                                            fotosEnFilaActualInterna++
-                                            Log.d(TAG, "Imagen añadida correctamente para '$fotoPathString'. fotosEnFilaActualInterna: $fotosEnFilaActualInterna")
+                                            val imageCell = Cell()
+                                                .add(image)
+                                                .setBorder(null)
+                                                .setPadding(3f)
+                                                .setTextAlignment(TextAlignment.CENTER)
+                                                .setVerticalAlignment(VerticalAlignment.MIDDLE)
+                                            fotosTable.addCell(imageCell)
+                                            fotosEnFila++
                                         } else {
-                                            addErrorCellToFotoTable(fotosTableInterna, "Error img (vacía)", regularFont)
-                                            fotosEnFilaActualInterna++
+                                            addErrorCellToFotoTable(fotosTable, "Error img", regularFont)
+                                            fotosEnFila++
                                         }
                                     } else {
-                                        addErrorCellToFotoTable(fotosTableInterna, "Img no cargada", regularFont)
-                                        fotosEnFilaActualInterna++
+                                        addErrorCellToFotoTable(fotosTable, "Img no cargada", regularFont)
+                                        fotosEnFila++
                                     }
 
-                                    if (fotosEnFilaActualInterna == FOTOS_POR_FILA_INTERNA) {
-                                        Log.d(TAG, "Fila interna de fotos completada. Reseteando contador.")
-                                        fotosEnFilaActualInterna = 0
+                                    if (fotosEnFila == FOTOS_POR_FILA) {
+                                        fotosEnFila = 0
                                     }
                                 } catch (e: Exception) {
-                                    Log.e(TAG, "EXCEPCIÓN al procesar foto para PDF '$fotoPathString': ${e.message}", e)
-                                    addErrorCellToFotoTable(fotosTableInterna, "Error img (exc)", regularFont)
-                                    fotosEnFilaActualInterna++
-                                    if (fotosEnFilaActualInterna == FOTOS_POR_FILA_INTERNA) fotosEnFilaActualInterna = 0
+                                    Log.e(TAG, "Error procesando foto '$fotoPathString': ${e.message}", e)
+                                    addErrorCellToFotoTable(fotosTable, "Error", regularFont)
+                                    fotosEnFila++
+                                    if (fotosEnFila == FOTOS_POR_FILA) fotosEnFila = 0
                                 } finally {
-                                    bitmapRotado?.recycle() // Reciclar el bitmap después de usarlo
-                                    Log.d(TAG, "Bloque finally para '$fotoPathString'. Bitmap reciclado (si existía). fotosEnFilaActualInterna: $fotosEnFilaActualInterna")
+                                    bitmapRotado?.recycle()
                                 }
-                            } else {
-                                Log.w(TAG, "Ruta de foto vacía o en blanco encontrada en el índice $index.")
                             }
                         }
-                        Log.d(TAG, "Procesamiento de todas las rutas de fotos finalizado para la habitación '${habitacion.nombre}'. fotosEnFilaActualInterna (antes de completar): $fotosEnFilaActualInterna")
 
-                        if (fotosEnFilaActualInterna > 0 && fotosEnFilaActualInterna < FOTOS_POR_FILA_INTERNA) {
-                            Log.d(TAG, "Completando la última fila de fotos con ${FOTOS_POR_FILA_INTERNA - fotosEnFilaActualInterna} celdas vacías.")
-                            for (i in fotosEnFilaActualInterna until FOTOS_POR_FILA_INTERNA) {
-                                fotosTableInterna.addCell(Cell().add(Paragraph(" ")).setBorder(null))
+                        // Completar última fila con celdas vacías
+                        if (fotosEnFila > 0 && fotosEnFila < FOTOS_POR_FILA) {
+                            for (i in fotosEnFila until FOTOS_POR_FILA) {
+                                fotosTable.addCell(Cell().add(Paragraph(" ")).setBorder(null))
                             }
                         }
-                        fotoContainerCell.add(fotosTableInterna)
-                        table.addCell(fotoContainerCell)
-                        Log.d(TAG, "Contenedor de fotos añadido a la tabla principal para la habitación '${habitacion.nombre}'.")
+
+                        document.add(fotosTable)
                     } else {
-                        Log.d(TAG, "Habitación '${habitacion.nombre}': No hay rutas de fotos para procesar.")
-                        val noFotoCell = Cell(1, NUMERO_COLUMNAS_DETALLES)
-                            .add(Paragraph("Sin fotos registradas")
-                                .setFont(regularFont).setFontSize(8f)
-                                .setTextAlignment(TextAlignment.CENTER).setPadding(5f))
-                            .setBorderTop(SolidBorder(ColorConstants.LIGHT_GRAY, 0.5f))
-                            .setBorderBottom(SolidBorder(ColorConstants.LIGHT_GRAY, 0.5f))
-                            .setBorderLeft(null).setBorderRight(null)
-                        table.addCell(noFotoCell)
+                        document.add(
+                            Paragraph("Sin fotos registradas")
+                                .setFont(regularFont).setFontSize(8f).setItalic()
+                                .setTextAlignment(TextAlignment.CENTER)
+                                .setMarginBottom(4f)
+                        )
                     }
 
+                    // Separador entre habitaciones
                     if (indexHab < habitaciones.size - 1) {
-                        val spacerCell = Cell(1, NUMERO_COLUMNAS_DETALLES)
-                            .setBorder(null).setHeight(10f)
-                        table.addCell(spacerCell)
+                        document.add(Paragraph("").setMarginBottom(12f))
                     }
                 }
-                document.add(table)
             } else {
                 document.add(Paragraph("No se registraron habitaciones.").setFont(regularFont).setItalic())
             }
@@ -350,24 +350,28 @@ object PdfGenerator {
         //  HABITACIONES (solo partidas variables)
         // ══════════════════════════════════════════
         for (hab in presupuesto.habitaciones) {
-            // Encabezado de habitación
-            val habHeaderTable = Table(UnitValue.createPercentArray(floatArrayOf(4f, 1f, 1f, 1f))).useAllAvailableWidth()
+            // Encabezado de habitación — dimensiones dinámicas según datos disponibles
+            val tieneAncho = hab.anchoCm > 0
+            val habHeaderWidths = if (tieneAncho) floatArrayOf(4f, 1f, 1f, 1f) else floatArrayOf(4f, 1f, 1f)
+            val habHeaderTable = Table(UnitValue.createPercentArray(habHeaderWidths)).useAllAvailableWidth()
             habHeaderTable.addCell(
                 Cell().add(Paragraph(hab.nombre.uppercase()).setFont(titleFont).setFontSize(11f).setFontColor(ColorConstants.WHITE))
                     .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
             )
             habHeaderTable.addCell(
-                Cell().add(Paragraph("Alto: ${String.format(Locale.getDefault(), "%.2f", hab.altoCm / 100.0)}")
-                    .setFont(regularFont).setFontSize(8f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.CENTER))
-                    .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
-            )
-            habHeaderTable.addCell(
-                Cell().add(Paragraph("Ancho: ${String.format(Locale.getDefault(), "%.2f", hab.anchoCm / 100.0)}")
-                    .setFont(regularFont).setFontSize(8f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.CENTER))
-                    .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
-            )
-            habHeaderTable.addCell(
                 Cell().add(Paragraph("Largo: ${String.format(Locale.getDefault(), "%.2f", hab.largoCm / 100.0)}")
+                    .setFont(regularFont).setFontSize(8f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.CENTER))
+                    .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
+            )
+            if (tieneAncho) {
+                habHeaderTable.addCell(
+                    Cell().add(Paragraph("Ancho: ${String.format(Locale.getDefault(), "%.2f", hab.anchoCm / 100.0)}")
+                        .setFont(regularFont).setFontSize(8f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.CENTER))
+                        .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
+                )
+            }
+            habHeaderTable.addCell(
+                Cell().add(Paragraph("Alto: ${String.format(Locale.getDefault(), "%.2f", hab.altoCm / 100.0)}")
                     .setFont(regularFont).setFontSize(8f).setFontColor(ColorConstants.WHITE).setTextAlignment(TextAlignment.CENTER))
                     .setBackgroundColor(COLOR_HEADER_HAB).setPadding(6f).setBorder(null)
             )

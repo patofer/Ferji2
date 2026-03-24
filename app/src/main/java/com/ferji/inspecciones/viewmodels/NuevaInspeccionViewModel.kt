@@ -298,6 +298,51 @@ class NuevaInspeccionViewModel @Inject constructor(
         val excelGenerator = ExcelGenerator(applicationContext)
         val excelResult = excelGenerator.generarPresupuesto(inspeccion, habitaciones, partidaRepository)
 
+        // --- Recopilar fotos de todas las habitaciones ---
+        val adjuntosFotos = mutableListOf<EmailService.Adjunto>()
+        val siniestroLimpio = inspeccion.siniestro.replace("[^a-zA-Z0-9]".toRegex(), "")
+        val codigoUnico = "${siniestroLimpio}_${System.currentTimeMillis() % 100000}"
+
+        for (habitacion in habitaciones) {
+            val fotos = habitacion.getFotosList()
+            // Limpiar nombre de habitación para usar como nombre de archivo
+            val habNombre = habitacion.nombre
+                .replace("[^a-zA-ZáéíóúñÁÉÍÓÚÑ0-9 ]".toRegex(), "")
+                .trim()
+                .replace("\\s+".toRegex(), "_")
+
+            fotos.forEachIndexed { index, fotoPath ->
+                if (fotoPath.isNotBlank()) {
+                    val file = java.io.File(fotoPath)
+                    if (file.exists()) {
+                        try {
+                            val fotoUri = androidx.core.content.FileProvider.getUriForFile(
+                                applicationContext,
+                                "${applicationContext.packageName}.provider",
+                                file
+                            )
+                            val extension = file.extension.ifBlank { "jpg" }
+                            // Formato: Cocina_1_SIN12345_83721.jpg
+                            val nombreFoto = "${habNombre}_${index + 1}_${codigoUnico}.$extension"
+                            adjuntosFotos.add(
+                                EmailService.Adjunto(
+                                    uri = fotoUri,
+                                    nombreArchivo = nombreFoto,
+                                    mimeType = "image/$extension"
+                                )
+                            )
+                            Log.d("NuevaInspVM", "Foto preparada: $nombreFoto")
+                        } catch (e: Exception) {
+                            Log.e("NuevaInspVM", "Error preparando foto '$fotoPath': ${e.message}")
+                        }
+                    } else {
+                        Log.w("NuevaInspVM", "Archivo de foto no encontrado: $fotoPath")
+                    }
+                }
+            }
+        }
+        Log.d("NuevaInspVM", "Total fotos recopiladas para adjuntar: ${adjuntosFotos.size}")
+
         // --- Preparar adjuntos base ---
         val nombrePdf = "Inspeccion_${inspeccion.siniestro}_${inspeccion.rut}.pdf"
         val adjuntoPdf = EmailService.Adjunto(
@@ -305,18 +350,23 @@ class NuevaInspeccionViewModel @Inject constructor(
             nombreArchivo = nombrePdf,
             mimeType = "application/pdf"
         )
-        val adjuntoExcel = if (excelResult?.uri != null) {
-            EmailService.Adjunto(
-                uri = excelResult.uri,
-                nombreArchivo = excelResult.fileName,
-                mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        } else null
+        val adjuntoExcel = when (excelResult) {
+            is com.ferji.inspecciones.domain.model.AppResult.Success -> {
+                if (excelResult.data.uri != null) {
+                    EmailService.Adjunto(
+                        uri = excelResult.data.uri,
+                        nombreArchivo = excelResult.data.fileName,
+                        mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                } else null
+            }
+            else -> null
+        }
 
         if (adjuntoExcel != null) {
-            Log.d("NuevaInspVM", "Excel generado: ${excelResult?.fileName}")
+            Log.d("NuevaInspVM", "Excel generado: ${(excelResult as? com.ferji.inspecciones.domain.model.AppResult.Success)?.data?.fileName}")
         } else {
-            Log.w("NuevaInspVM", "No se pudo generar el presupuesto Excel.")
+            Log.w("NuevaInspVM", "No se pudo generar el presupuesto Excel: ${(excelResult as? com.ferji.inspecciones.domain.model.AppResult.Error)?.message ?: "desconocido"}")
         }
 
         // --- CC general ---
@@ -326,15 +376,16 @@ class NuevaInspeccionViewModel @Inject constructor(
         }
 
         // ═══════════════════════════════════════════════
-        // 1. EMAIL AL ADMINISTRADOR (siempre PDF + Excel)
+        // 1. EMAIL AL ADMINISTRADOR (siempre PDF + Excel + Fotos)
         // ═══════════════════════════════════════════════
         if (emailSettings.emailAdmin.isNotBlank() && emailSettings.emailAdmin.esEmailValido()) {
             val adjuntosAdmin = mutableListOf(adjuntoPdf)
             if (adjuntoExcel != null) adjuntosAdmin.add(adjuntoExcel)
+            adjuntosAdmin.addAll(adjuntosFotos) // Admin siempre recibe las fotos
 
             val ccAdmin = ccList.filterNot { it.equals(emailSettings.emailAdmin, ignoreCase = true) }.ifEmpty { null }
 
-            val cuerpoAdmin = buildCuerpoHtml(inspeccion, adjuntoExcel != null)
+            val cuerpoAdmin = buildCuerpoHtml(inspeccion, adjuntoExcel != null, adjuntosFotos.size)
 
             Log.d("NuevaInspVM", "Enviando email ADMIN a: ${emailSettings.emailAdmin}, CC: $ccAdmin, adjuntos: ${adjuntosAdmin.size}")
             val resultadoAdmin = emailService.enviarConAdjuntos(
@@ -363,20 +414,23 @@ class NuevaInspeccionViewModel @Inject constructor(
         val emailInspector = inspeccion.mail
         val enviarPdfAlInspector = emailSettings.enviarInspeccionAlInspector
         val enviarExcelAlInspector = emailSettings.enviarPresupuestoAlInspector
+        val enviarImagenesAlInspector = emailSettings.enviarImagenesAlInspector
 
         // Solo enviar si al menos una regla está activa y el email es válido
-        if ((enviarPdfAlInspector || enviarExcelAlInspector) && emailInspector.esEmailValido()) {
+        if ((enviarPdfAlInspector || enviarExcelAlInspector || enviarImagenesAlInspector) && emailInspector.esEmailValido()) {
             // No enviar al inspector si es el mismo que el admin (ya lo recibió)
             if (!emailInspector.equals(emailSettings.emailAdmin, ignoreCase = true)) {
                 val adjuntosInspector = mutableListOf<EmailService.Adjunto>()
                 if (enviarPdfAlInspector) adjuntosInspector.add(adjuntoPdf)
                 if (enviarExcelAlInspector && adjuntoExcel != null) adjuntosInspector.add(adjuntoExcel)
+                if (enviarImagenesAlInspector) adjuntosInspector.addAll(adjuntosFotos)
 
                 if (adjuntosInspector.isNotEmpty()) {
                     val tieneExcel = enviarExcelAlInspector && adjuntoExcel != null
-                    val cuerpoInspector = buildCuerpoHtml(inspeccion, tieneExcel)
+                    val numFotosInspector = if (enviarImagenesAlInspector) adjuntosFotos.size else 0
+                    val cuerpoInspector = buildCuerpoHtml(inspeccion, tieneExcel, numFotosInspector)
 
-                    Log.d("NuevaInspVM", "Enviando email INSPECTOR a: $emailInspector, adjuntos: ${adjuntosInspector.size} (PDF=$enviarPdfAlInspector, Excel=$enviarExcelAlInspector)")
+                    Log.d("NuevaInspVM", "Enviando email INSPECTOR a: $emailInspector, adjuntos: ${adjuntosInspector.size} (PDF=$enviarPdfAlInspector, Excel=$enviarExcelAlInspector, Fotos=$enviarImagenesAlInspector)")
                     val resultadoInspector = emailService.enviarConAdjuntos(
                         destinatarios = listOf(emailInspector),
                         cc = null,
@@ -398,7 +452,7 @@ class NuevaInspeccionViewModel @Inject constructor(
                 Log.d("NuevaInspVM", "Inspector y admin son el mismo email, no se envía duplicado.")
             }
         } else {
-            Log.d("NuevaInspVM", "No se envía email al inspector (reglas: PDF=$enviarPdfAlInspector, Excel=$enviarExcelAlInspector, email válido=${emailInspector.esEmailValido()})")
+            Log.d("NuevaInspVM", "No se envía email al inspector (reglas: PDF=$enviarPdfAlInspector, Excel=$enviarExcelAlInspector, Fotos=$enviarImagenesAlInspector, email válido=${emailInspector.esEmailValido()})")
         }
 
         _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Proceso de envío de emails completado."))
@@ -407,11 +461,15 @@ class NuevaInspeccionViewModel @Inject constructor(
     /**
      * Genera el cuerpo HTML del email.
      */
-    private fun buildCuerpoHtml(inspeccion: InspeccionEntity, incluirExcel: Boolean): String {
+    private fun buildCuerpoHtml(inspeccion: InspeccionEntity, incluirExcel: Boolean, numFotos: Int = 0): String {
+        val adjuntosTexto = if (incluirExcel || numFotos > 0) {
+            " y el presupuesto de reparación"
+        } else ""
+
         return """
             <html><body>
             <p>Estimado/a,</p>
-            <p>Adjunto encontrará el informe de la inspección${if (incluirExcel) " y el presupuesto de reparación" else ""}
+            <p>Adjunto encontrará el informe de la inspección${adjuntosTexto}
             para el <strong>siniestro N° ${inspeccion.siniestro}</strong>.</p>
             <table border="1" cellpadding="6" cellspacing="0">
                 <tr><th>RUT Cliente</th><td>${inspeccion.rut}</td></tr>
@@ -423,6 +481,7 @@ class NuevaInspeccionViewModel @Inject constructor(
             <ul>
                 <li>Informe de Inspección (PDF)</li>
                 ${if (incluirExcel) "<li>Presupuesto de Reparación (Excel)</li>" else ""}
+                ${if (numFotos > 0) "<li>Fotografías de la inspección ($numFotos imágenes)</li>" else ""}
             </ul>
             <p>Si tiene alguna consulta, no dude en contactarnos.</p>
             <p>Saludos cordiales,<br/><strong>Equipo Ferji Inspecciones</strong></p>

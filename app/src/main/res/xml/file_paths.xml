@@ -6,7 +6,6 @@
     <!-- Para imágenes en el subdirectorio 'images' del caché -->
     <cache-path name="image_cache_subdir" path="images/" />
 
-    <!-- Si tienes fotos que guardas en filesDir/fotos_inspecciones/ como vi en logs anteriores -->
-    <!-- y necesitas compartirlas con FileProvider (e.g., para enviarlas por correo desde fuera de la app) -->
-    <!-- <files-path name="fotos_inspecciones_files" path="fotos_inspecciones/" /> -->
+    <!-- Para fotos de inspecciones guardadas en filesDir/fotos_inspecciones/ -->
+    <files-path name="fotos_inspecciones_files" path="fotos_inspecciones/" />
 </paths>

@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.ferji.inspecciones.data.database.AppDatabase
 import com.ferji.inspecciones.data.dao.HabitacionDao
 import com.ferji.inspecciones.data.repository.InspeccionRepository
 import com.ferji.inspecciones.ui.components.FerjiEmptyState
@@ -38,14 +37,19 @@ import com.ferji.inspecciones.ui.components.FerjiStatusBadge
 import com.ferji.inspecciones.ui.components.FerjiTitleBar
 import com.ferji.inspecciones.ui.components.FerjiBrandBanner
 import com.ferji.inspecciones.ui.theme.*
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.inject.Inject
 
 
-
+@AndroidEntryPoint
 class ListaInspeccionesActivity : ComponentActivity() {
+
+    @Inject lateinit var repository: InspeccionRepository
+    @Inject lateinit var habitacionDao: HabitacionDao
 
     private lateinit var retomarInspeccionLauncher: ActivityResultLauncher<Intent>
     private var inspeccionIdRetomada: Long = -1L
@@ -53,9 +57,6 @@ class ListaInspeccionesActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val database = AppDatabase.getDatabase(this)
-        val repository = InspeccionRepository(database.inspeccionDao())
-        val habitacionDao = database.habitacionDao()
 
         retomarInspeccionLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()

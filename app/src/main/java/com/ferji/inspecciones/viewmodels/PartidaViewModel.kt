@@ -72,35 +72,35 @@ class PartidaViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val esNuevo = (id == null || id == 0L)
 
-            // --- INICIO DE LA CORRECCIÓN CLAVE ---
             val partida = if (esNuevo) {
-                // SI ES NUEVO: No especificamos el ID. Dejamos que Room lo autogenere.
+                // SI ES NUEVO: Room autogenera el ID.
                 // Generamos un firebaseId temporal único para evitar conflictos con el
-                // índice UNIQUE sobre firebaseId (si queda vacío, @Upsert reemplaza la fila anterior).
+                // índice UNIQUE sobre firebaseId.
                 PartidaEntity(
                     descripcion = descripcion,
                     unidad = unidad.name,
                     precioUnitario = precio,
                     partidaPrincipalId = partidaPrincipalId,
                     firebaseId = "local_${java.util.UUID.randomUUID()}",
-                    sincronizadoConFirebase = false, // Es nuevo, necesita subirse
+                    sincronizadoConFirebase = false,
                     eliminado = false
                 )
             } else {
-                // SI ES UNA EDICIÓN: Usamos el ID que nos pasaron.
+                // SI ES UNA EDICIÓN: Recuperar la partida existente para conservar su firebaseId.
+                // Sin esto, el firebaseId queda vacío ("") y causa:
+                // SQLiteConstraintException: UNIQUE constraint failed: partidas.firebaseId
+                val existente = repository.getPartidaById(id!!)
                 PartidaEntity(
-                    id = id!!,
+                    id = id,
                     descripcion = descripcion,
                     unidad = unidad.name,
                     precioUnitario = precio,
                     partidaPrincipalId = partidaPrincipalId,
-                    // Aquí podrías añadir lógica para marcarlo como no sincronizado si se edita,
-                    // pero por ahora lo dejamos así para no complicarlo.
-                    sincronizadoConFirebase = true,
+                    firebaseId = existente?.firebaseId ?: "local_${java.util.UUID.randomUUID()}",
+                    sincronizadoConFirebase = false, // Marcamos como no sincronizado para re-subir
                     eliminado = false
                 )
             }
-            // --- FIN DE LA CORRECCIÓN CLAVE ---
 
             repository.upsertPartida(partida)
             Log.d("PartidaVM", "Partida guardada localmente: $partida")

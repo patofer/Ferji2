@@ -534,15 +534,6 @@ fun PantallaNuevaHabitacion(
                             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                         ) {
                             OutlinedTextField(
-                                value = state.alto.takeIf { it != 0 }?.toString() ?: "",
-                                onValueChange = { viewModel.onAltoChange(it.toIntOrNull() ?: 0) },
-                                label = { Text("Alto") },
-                                modifier = Modifier.weight(1f),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            OutlinedTextField(
                                 value = state.largo.takeIf { it != 0 }?.toString() ?: "",
                                 onValueChange = { viewModel.onLargoChange(it.toIntOrNull() ?: 0) },
                                 label = { Text("Largo") },
@@ -555,6 +546,15 @@ fun PantallaNuevaHabitacion(
                                 value = state.ancho.takeIf { it != 0 }?.toString() ?: "",
                                 onValueChange = { viewModel.onAnchoChange(it.toIntOrNull() ?: 0) },
                                 label = { Text("Ancho") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            OutlinedTextField(
+                                value = state.alto.takeIf { it != 0 }?.toString() ?: "",
+                                onValueChange = { viewModel.onAltoChange(it.toIntOrNull() ?: 0) },
+                                label = { Text("Alto") },
                                 modifier = Modifier.weight(1f),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
@@ -656,7 +656,14 @@ fun PantallaNuevaHabitacion(
                                 state.fotosTomadas.take(4).forEach { fotoRuta ->
                                     val bitmap = remember(fotoRuta) {
                                         try {
-                                            BitmapFactory.decodeFile(fotoRuta)
+                                            // Cargar con inSampleSize para evitar OOM con fotos grandes
+                                            val options = BitmapFactory.Options().apply {
+                                                inJustDecodeBounds = true
+                                            }
+                                            BitmapFactory.decodeFile(fotoRuta, options)
+                                            options.inSampleSize = calculateInSampleSize(options, 120, 120)
+                                            options.inJustDecodeBounds = false
+                                            BitmapFactory.decodeFile(fotoRuta, options)
                                         } catch (_: Exception) {
                                             null
                                         }
@@ -805,3 +812,25 @@ private fun obtenerTextoDeSeleccion(state: NuevaHabitacionViewModel.NuevaHabitac
         else -> "${selecciones.take(2).joinToString(", ")} y ${selecciones.size - 2} más"
     }
 }
+
+/**
+ * Calcula un inSampleSize adecuado para cargar bitmaps redimensionados.
+ * Evita OOM al cargar fotos de alta resolución para thumbnails pequeños.
+ */
+private fun calculateInSampleSize(
+    options: BitmapFactory.Options,
+    reqWidth: Int,
+    reqHeight: Int
+): Int {
+    val (height: Int, width: Int) = options.outHeight to options.outWidth
+    var inSampleSize = 1
+    if (height > reqHeight || width > reqWidth) {
+        val halfHeight = height / 2
+        val halfWidth = width / 2
+        while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+            inSampleSize *= 2
+        }
+    }
+    return inSampleSize
+}
+

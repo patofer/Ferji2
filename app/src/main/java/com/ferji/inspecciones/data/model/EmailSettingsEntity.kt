@@ -8,14 +8,16 @@ data class EmailSettingsEntity(
     val emailAdmin: String = "",
     val emailCc: String = "",
     val enviarInspeccionAlInspector: Boolean = false,
-    val enviarPresupuestoAlInspector: Boolean = false
+    val enviarPresupuestoAlInspector: Boolean = false,
+    val enviarImagenesAlInspector: Boolean = false
 ) {
     /** Convierte a Map para guardar en Firestore */
     fun toMap(): Map<String, Any> = mapOf(
         "emailAdmin" to emailAdmin,
         "emailCc" to emailCc,
         "enviarInspeccionAlInspector" to enviarInspeccionAlInspector,
-        "enviarPresupuestoAlInspector" to enviarPresupuestoAlInspector
+        "enviarPresupuestoAlInspector" to enviarPresupuestoAlInspector,
+        "enviarImagenesAlInspector" to enviarImagenesAlInspector
     )
 
     companion object {
@@ -25,7 +27,8 @@ data class EmailSettingsEntity(
                 emailAdmin = map["emailAdmin"] as? String ?: "",
                 emailCc = map["emailCc"] as? String ?: "",
                 enviarInspeccionAlInspector = map["enviarInspeccionAlInspector"] as? Boolean ?: false,
-                enviarPresupuestoAlInspector = map["enviarPresupuestoAlInspector"] as? Boolean ?: false
+                enviarPresupuestoAlInspector = map["enviarPresupuestoAlInspector"] as? Boolean ?: false,
+                enviarImagenesAlInspector = map["enviarImagenesAlInspector"] as? Boolean ?: false
             )
         }
     }
