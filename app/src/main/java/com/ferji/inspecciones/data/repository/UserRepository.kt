@@ -38,8 +38,9 @@ class UserRepository @Inject constructor(
     // fun getUserSession(): Flow<UserSession> = sessionManager.userSessionFlow
 
     suspend fun login(rut: String, nombre: String, email: String) {
-        // Asigna el rol basado en la lista de administradores
-        val userRole = if (adminUsers.any { it.rut == rut }) UserRoles.ADMIN else UserRoles.USER
+        // Normaliza el RUT para comparación (minúsculas y sin espacios)
+        val rutNormalizado = rut.trim().lowercase()
+        val userRole = if (adminUsers.any { it.rut.trim().lowercase() == rutNormalizado }) UserRoles.ADMIN else UserRoles.USER
 
         // Guarda la sesión actual
         sessionManager.saveUserSession(rut, nombre, email, userRole)

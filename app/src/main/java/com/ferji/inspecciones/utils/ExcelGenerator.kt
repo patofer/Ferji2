@@ -225,13 +225,19 @@ class ExcelGenerator(private val context: Context) {
         val largoM = habitacion.largo / 100.0
         val anchoM = habitacion.ancho / 100.0
 
+        // Verificar si la descripción de la partida HIJA contiene "muro"
+        val esMuroPorDescripcionHija = partida.descripcion.uppercase().contains("MURO")
+
         return when (partida.unidad.uppercase()) {
             "M2" -> {
-                when (tipoSuperficie.uppercase()) {
-                    "MURO" -> 2.0 * (largoM + anchoM) * altoM
-                    "PISO" -> largoM * anchoM
-                    "CIELO" -> largoM * anchoM
-                    else -> largoM * anchoM
+                if (esMuroPorDescripcionHija) {
+                    2.0 * (largoM + anchoM) * altoM
+                } else {
+                    when (tipoSuperficie.uppercase()) {
+                        "PISO" -> largoM * anchoM
+                        "CIELO" -> largoM * anchoM
+                        else -> largoM * anchoM
+                    }
                 }
             }
             "ML" -> 2.0 * (largoM + anchoM)
@@ -256,10 +262,20 @@ class ExcelGenerator(private val context: Context) {
         ws.style(row, 0).bold().fontSize(14).set()
         row += 2
 
-        ws.value(row, 0, "Siniestro:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.siniestro); row++
-        ws.value(row, 0, "RUT Cliente:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.rut); row++
-        ws.value(row, 0, "Dirección:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.direccion); row++
-        ws.value(row, 0, "Inspector:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.rutInspector); row++
+        // Datos del siniestro (izquierda) + Datos de la empresa (derecha)
+        val encabezadoRow = row
+        ws.value(row, 0, "Siniestro:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.siniestro)
+        ws.value(row, 5, "CONSTRUCCIONES Y ALUMINIOS DEL MAULE"); ws.style(row, 5).bold().fontSize(11).set()
+        row++
+        ws.value(row, 0, "RUT Cliente:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.rut)
+        ws.value(row, 5, "CALLE 6 NORTE 2380 TALCA"); ws.style(row, 5).fontSize(10).set()
+        row++
+        ws.value(row, 0, "Dirección:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.direccion)
+        ws.value(row, 5, "REGION DEL MAULE"); ws.style(row, 5).fontSize(10).set()
+        row++
+        ws.value(row, 0, "Inspector:"); ws.style(row, 0).bold().set(); ws.value(row, 1, inspeccion.rutInspector)
+        ws.value(row, 5, "TELÉFONO: +569320485044"); ws.style(row, 5).fontSize(10).set()
+        row++
         ws.value(row, 0, "Fecha:"); ws.style(row, 0).bold().set()
         ws.value(row, 1, SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())); row++
         row++
@@ -341,11 +357,72 @@ class ExcelGenerator(private val context: Context) {
             row += 2
         }
 
-        // ═══ TOTAL GENERAL ═══
-        ws.value(row, 0, "TOTAL GENERAL PRESUPUESTO")
-        ws.value(row, 7, redondear2(presupuesto.totalGeneral))
+        // ═══ DESGLOSE FINAL ═══
+        val costoDirecto = presupuesto.totalGeneral
+        val gastosGenerales = redondear2(costoDirecto * 0.25)
+        val costoNeto = redondear2(costoDirecto + gastosGenerales)
+        val iva = redondear2(costoNeto * 0.19)
+        val costoTotal = redondear2(costoNeto + iva)
+
+        // COSTO DIRECTO DE OBRA
+        ws.value(row, 0, "COSTO DIRECTO DE OBRA")
+        ws.value(row, 7, redondear2(costoDirecto))
         for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").set() }
         ws.style(row, 7).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").format("$ #,##0").set()
+        row++
+
+        // GASTOS GENERALES Y UTILIDADES 25%
+        ws.value(row, 0, "GASTOS GENERALES Y UTILIDADES 25%")
+        ws.value(row, 7, gastosGenerales)
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").set() }
+        ws.style(row, 7).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").format("$ #,##0").set()
+        row++
+
+        // COSTO NETO
+        ws.value(row, 0, "COSTO NETO")
+        ws.value(row, 7, costoNeto)
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").set() }
+        ws.style(row, 7).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").format("$ #,##0").set()
+        row++
+
+        // IVA 19%
+        ws.value(row, 0, "IVA 19%")
+        ws.value(row, 7, iva)
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").set() }
+        ws.style(row, 7).bold().fontSize(12).fillColor("C0392B").fontColor("FFFFFF").format("$ #,##0").set()
+        row++
+
+        // COSTO TOTAL EN $
+        ws.value(row, 0, "COSTO TOTAL EN $")
+        ws.value(row, 7, costoTotal)
+        for (c in 0..7) { ws.style(row, c).bold().fontSize(14).fillColor("8B0000").fontColor("FFFFFF").set() }
+        ws.style(row, 7).bold().fontSize(14).fillColor("8B0000").fontColor("FFFFFF").format("$ #,##0").set()
+        row += 2
+
+        // ═══ OBSERVACIONES ═══
+        ws.value(row, 0, "OBSERVACIONES:")
+        ws.style(row, 0).bold().fontSize(12).set()
+        row += 2
+
+        val observaciones = listOf(
+            "1) Para la determinación de los precios unitarios, estos deben incluir lo siguiente:\n" +
+                    "   -Material\n" +
+                    "   -Herramientas\n" +
+                    "   -Perdida\n" +
+                    "   -Mano de Obra\n" +
+                    "   -Leyes Sociales\n" +
+                    "   Referente a lo anterior, estos son los ítems mínimos requeridos para el cálculo del precio unitario.",
+            "2) Para terminaciones de Muros, Tabiques y Cielos, se debe siempre aplicar como primera mano pintura base aparejo Sipa, con la finalidad de cubrir imperfecciones y manchas de la superficie, para luego dar terminación con Esmaltes al Agua.",
+            "3) Para baños y cocinas es necesario el retiro y reposición de artefactos para las reparaciones de muros y pisos. (lavaplatos, lavamanos, griferías etc.)",
+            "4) Para pisos y muros de cerámicos, es necesario el retiro completo de las palmetas, debido a que estas son descontinuadas rápidamente del mercado.",
+            "5) Para el Ítem de Preparación de Superficie, en importante comprobar y verificar las superficies a reparar encuentren en óptimas condiciones, ya sean secas, limpias, y libres de imperfecciones etc."
+        )
+
+        for (obs in observaciones) {
+            ws.value(row, 0, obs)
+            ws.style(row, 0).wrapText(true).fontSize(10).set()
+            row += 2
+        }
 
         // ── Anchos de columna ──
         ws.width(0, 50.0); ws.width(1, 10.0); ws.width(2, 10.0); ws.width(3, 10.0)
