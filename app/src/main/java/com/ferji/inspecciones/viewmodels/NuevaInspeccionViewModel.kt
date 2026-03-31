@@ -24,6 +24,14 @@ import com.ferji.inspecciones.utils.ExcelGenerator
 import com.ferji.inspecciones.utils.PdfGenerator
 import com.ferji.inspecciones.utils.esEmailValido
 import com.ferji.inspecciones.utils.validarRutChileno
+import com.ferji.inspecciones.domain.usecase.SyncInspeccionToFirebaseUseCase
+import com.ferji.inspecciones.workers.SyncInspeccionWorker
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.Channel
@@ -45,7 +53,8 @@ class NuevaInspeccionViewModel @Inject constructor(
     private val partidaRepository: PartidaRepository,
     private val emailService: EmailService,
     private val userRepository: UserRepository,
-    private val emailSettingsRepository: EmailSettingsRepository
+    private val emailSettingsRepository: EmailSettingsRepository,
+    private val syncInspeccionUseCase: SyncInspeccionToFirebaseUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NuevaInspeccionScreenUiState())
@@ -159,6 +168,16 @@ class NuevaInspeccionViewModel @Inject constructor(
                 val inspeccionId = inspeccionRepository.insertInspeccion(nuevaInspeccion)
                 currentInspeccionIdForPdf = inspeccionId
                 Log.d("NuevaInspVM", "Inspección guardada, ID: $inspeccionId")
+
+                // Sincronizar inspección PENDIENTE a Firebase (para que aparezca en el panel web)
+                try {
+                    syncInspeccionUseCase(inspeccionId)
+                    Log.d("NuevaInspVM", "Inspección PENDIENTE sincronizada a Firebase")
+                } catch (e: Exception) {
+                    Log.w("NuevaInspVM", "No se pudo sincronizar inspección pendiente: ${e.message}")
+                    programarSyncWorker(inspeccionId)
+                }
+
                 _uiEvents.send(NuevaInspeccionUiEvent.NavigateToNewRoom(inspeccionId))
             } catch (e: Exception) {
                 Log.e("NuevaInspVM", "Error al guardar inspección", e)
@@ -258,7 +277,24 @@ class NuevaInspeccionViewModel @Inject constructor(
             _uiState.update { it.copy(isSendingEmail = false) }
         }
 
-        Log.d("NuevaInspVM", "proceedToFinalizeAndExit: Operación de email completada. Enviando NavigateBackToMenu.")
+        // ═══ SINCRONIZAR INSPECCIÓN A FIREBASE ═══
+        Log.d("NuevaInspVM", "proceedToFinalizeAndExit: Sincronizando a Firebase...")
+        if (inspeccionId != null) {
+            try {
+                val sincronizado = syncInspeccionUseCase(inspeccionId)
+                if (sincronizado) {
+                    Log.i("NuevaInspVM", "Inspección $inspeccionId sincronizada a Firebase correctamente.")
+                } else {
+                    Log.w("NuevaInspVM", "No se pudo sincronizar a Firebase. Programando Worker para reintentar.")
+                    programarSyncWorker(inspeccionId)
+                }
+            } catch (e: Exception) {
+                Log.e("NuevaInspVM", "Error sincronizando a Firebase: ${e.message}. Programando Worker.")
+                programarSyncWorker(inspeccionId)
+            }
+        }
+
+        Log.d("NuevaInspVM", "proceedToFinalizeAndExit: Enviando NavigateBackToMenu.")
         _uiEvents.send(NuevaInspeccionUiEvent.NavigateBackToMenu)
 
         _uiState.update { it.copy(isLoadingGlobal = false, isSendingEmail = false, pdfGenerationResult = PdfGenerationResult.Idle) }
@@ -365,6 +401,12 @@ class NuevaInspeccionViewModel @Inject constructor(
 
         if (adjuntoExcel != null) {
             Log.d("NuevaInspVM", "Excel generado: ${(excelResult as? com.ferji.inspecciones.domain.model.AppResult.Success)?.data?.fileName}")
+            // Guardar el total del presupuesto en Room
+            val totalPresupuesto = (excelResult as? com.ferji.inspecciones.domain.model.AppResult.Success)?.data?.totalPresupuesto ?: 0.0
+            if (totalPresupuesto > 0) {
+                inspeccionRepository.actualizarTotalPresupuesto(inspeccionId, totalPresupuesto)
+                Log.d("NuevaInspVM", "Total presupuesto guardado: $$totalPresupuesto")
+            }
         } else {
             Log.w("NuevaInspVM", "No se pudo generar el presupuesto Excel: ${(excelResult as? com.ferji.inspecciones.domain.model.AppResult.Error)?.message ?: "desconocido"}")
         }
@@ -456,6 +498,27 @@ class NuevaInspeccionViewModel @Inject constructor(
         }
 
         _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Proceso de envío de emails completado."))
+    }
+
+    /**
+     * Programa un Worker para reintentar la sincronización a Firebase cuando hay conexión.
+     */
+    private fun programarSyncWorker(inspeccionId: Long) {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val workRequest = OneTimeWorkRequestBuilder<SyncInspeccionWorker>()
+            .setConstraints(constraints)
+            .setInputData(workDataOf(SyncInspeccionWorker.KEY_INSPECCION_ID to inspeccionId))
+            .build()
+
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            "${SyncInspeccionWorker.WORK_NAME}_$inspeccionId",
+            ExistingWorkPolicy.REPLACE,
+            workRequest
+        )
+        Log.d("NuevaInspVM", "Worker de sincronización programado para inspección $inspeccionId")
     }
 
     /**

@@ -35,4 +35,16 @@ class InspeccionRepository @Inject constructor(
     suspend fun actualizarEstado(id: Long, nuevoEstado: String) {
         inspeccionDao.actualizarEstado(id, nuevoEstado)
     }
+
+    suspend fun marcarComoSincronizada(id: Long, firebaseId: String) {
+        inspeccionDao.marcarComoSincronizada(id, firebaseId)
+    }
+
+    suspend fun getInspeccionesNoSincronizadas(): List<InspeccionEntity> {
+        return inspeccionDao.getInspeccionesNoSincronizadas()
+    }
+
+    suspend fun actualizarTotalPresupuesto(id: Long, total: Double) {
+        inspeccionDao.actualizarTotalPresupuesto(id, total)
+    }
 }

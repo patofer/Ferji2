@@ -24,7 +24,7 @@ import com.ferji.inspecciones.data.model.UserEntity
         PartidaPrincipalEntity::class,
         UserEntity::class
     ],
-    version = 17,
+    version = 19,
     exportSchema = true // Recomendado para producción: permite auditar migraciones.
 )
 @TypeConverters(Converters::class)

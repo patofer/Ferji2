@@ -12,6 +12,8 @@ import com.ferji.inspecciones.data.repository.HabitacionRepository
 import com.ferji.inspecciones.data.repository.InspeccionRepository
 import com.ferji.inspecciones.data.repository.PartidaRepository
 import com.ferji.inspecciones.utils.PdfGenerator
+import com.ferji.inspecciones.utils.ExcelGenerator
+import com.ferji.inspecciones.domain.model.AppResult
 import com.ferji.inspecciones.utils.email.EmailService
 import com.ferji.inspecciones.utils.esEmailValido
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -88,8 +90,8 @@ class ReenvioInspeccionesViewModel @Inject constructor(
     }
 
     /**
-     * Genera PDF y envía email para la inspección seleccionada.
-     * Solo envía el PDF de inspección (sin presupuesto Excel).
+     * Genera PDF + Excel y envía email para la inspección seleccionada.
+     * Incluye: PDF (siempre), Presupuesto Excel (siempre), Fotos (según configuración).
      */
     fun reenviarInspeccion(inspeccion: InspeccionEntity) {
         if (_reenvioState.value.isLoading) return
@@ -158,8 +160,11 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                 }
                 val cc = ccList.ifEmpty { null }
 
-                // 5. Preparar adjunto (solo PDF)
-                val adjuntos = listOf(
+                // 5. Preparar adjuntos: PDF + Excel + Fotos
+                val adjuntos = mutableListOf<EmailService.Adjunto>()
+
+                // PDF siempre se adjunta
+                adjuntos.add(
                     EmailService.Adjunto(
                         uri = pdfUri,
                         nombreArchivo = "Inspeccion_${inspeccion.siniestro}_${inspeccion.rut}.pdf",
@@ -167,11 +172,70 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                     )
                 )
 
+                // Generar Excel (presupuesto)
+                val excelGenerator = ExcelGenerator(applicationContext)
+                val excelResult = excelGenerator.generarPresupuesto(inspeccion, habitaciones, partidaRepository)
+                val adjuntoExcel = when (excelResult) {
+                    is AppResult.Success -> {
+                        if (excelResult.data.uri != null) {
+                            EmailService.Adjunto(
+                                uri = excelResult.data.uri,
+                                nombreArchivo = excelResult.data.fileName,
+                                mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        } else null
+                    }
+                    else -> null
+                }
+                if (adjuntoExcel != null) {
+                    adjuntos.add(adjuntoExcel)
+                    Log.d(TAG, "Excel adjuntado: ${adjuntoExcel.nombreArchivo}")
+                } else {
+                    Log.w(TAG, "No se pudo generar el presupuesto Excel para reenvío")
+                }
+
+                // Adjuntar fotos si la configuración lo permite
+                if (emailSettings.enviarImagenesAlInspector) {
+                    val siniestroLimpio = inspeccion.siniestro.replace("[^a-zA-Z0-9]".toRegex(), "")
+                    for (hab in habitaciones) {
+                        val fotos = hab.getFotosList()
+                        val nombreHab = hab.nombre.replace("[^a-zA-Z0-9]".toRegex(), "_")
+                        fotos.forEachIndexed { idx, fotoPath ->
+                            try {
+                                val file = java.io.File(fotoPath)
+                                if (file.exists()) {
+                                    val extension = file.extension.ifBlank { "jpg" }
+                                    val nombreFoto = "${nombreHab}_${siniestroLimpio}_${idx + 1}.$extension"
+                                    val fotoUri = FileProvider.getUriForFile(
+                                        applicationContext,
+                                        "${applicationContext.packageName}.provider",
+                                        file
+                                    )
+                                    adjuntos.add(
+                                        EmailService.Adjunto(
+                                            uri = fotoUri,
+                                            nombreArchivo = nombreFoto,
+                                            mimeType = "image/$extension"
+                                        )
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error preparando foto '$fotoPath': ${e.message}")
+                            }
+                        }
+                    }
+                    Log.d(TAG, "Total fotos adjuntadas: ${adjuntos.size - (if (adjuntoExcel != null) 2 else 1)}")
+                }
+
+                // Determinar qué documentos se adjuntaron para el cuerpo del email
+                val tieneExcel = adjuntoExcel != null
+                val numFotos = adjuntos.count { it.mimeType.startsWith("image/") }
+
                 val asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}"
                 val cuerpoHtml = """
                     <html><body>
                     <p>Estimado/a,</p>
-                    <p>Adjunto encontrará el informe de la inspección
+                    <p>Adjunto encontrará el informe de la inspección${if (tieneExcel) " y el presupuesto de reparación" else ""}
                     para el <strong>siniestro N° ${inspeccion.siniestro}</strong>.</p>
                     <table border="1" cellpadding="6" cellspacing="0">
                         <tr><th>RUT Cliente</th><td>${inspeccion.rut}</td></tr>
@@ -179,9 +243,11 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                         <tr><th>Inspector Asignado</th><td>${inspeccion.rutInspector}</td></tr>
                     </table>
                     <br/>
-                    <p><strong>Documento adjunto:</strong></p>
+                    <p><strong>Documentos adjuntos:</strong></p>
                     <ul>
                         <li>Informe de Inspección (PDF)</li>
+                        ${if (tieneExcel) "<li>Presupuesto de Reparación (Excel)</li>" else ""}
+                        ${if (numFotos > 0) "<li>Fotografías de la inspección ($numFotos imágenes)</li>" else ""}
                     </ul>
                     <p>Saludos cordiales,<br/><strong>Equipo Ferji Inspecciones</strong></p>
                     </body></html>

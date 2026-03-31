@@ -1,8 +1,9 @@
 package com.ferji.inspecciones.di
 
-
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import dagger.Module
 import dagger.Provides
@@ -20,5 +21,9 @@ object FirebaseModule {
         return Firebase.auth
     }
 
-    // Si necesitas proveer Firestore o otros servicios, los añades aquí.
+    @Provides
+    @Singleton
+    fun provideFirebaseFirestore(): FirebaseFirestore {
+        return Firebase.firestore
+    }
 }

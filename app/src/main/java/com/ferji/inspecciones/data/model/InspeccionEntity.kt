@@ -29,5 +29,17 @@ data class InspeccionEntity(
     val fechaCreacion: Date = Date(),
 
     @ColumnInfo(name = "estado", defaultValue = "PENDIENTE")
-    val estado: String = "PENDIENTE"
+    val estado: String = "PENDIENTE",
+
+    /** ID del documento en Firestore. Vacío si aún no se ha sincronizado. */
+    @ColumnInfo(name = "firebase_id", defaultValue = "")
+    val firebaseId: String = "",
+
+    /** Indica si la inspección ya fue subida a Firebase. */
+    @ColumnInfo(name = "sincronizado_firebase", defaultValue = "0")
+    val sincronizadoConFirebase: Boolean = false,
+
+    /** Total del presupuesto con IVA incluido. Se calcula al finalizar la inspección. */
+    @ColumnInfo(name = "total_presupuesto", defaultValue = "0")
+    val totalPresupuesto: Double = 0.0
 )

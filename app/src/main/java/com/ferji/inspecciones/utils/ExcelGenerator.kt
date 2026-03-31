@@ -70,7 +70,9 @@ class ExcelGenerator(private val context: Context) {
     data class ExcelResult(
         val uri: Uri?,
         val file: File?,
-        val fileName: String
+        val fileName: String,
+        /** Total del presupuesto con IVA incluido (Costo Total en $) */
+        val totalPresupuesto: Double = 0.0
     )
 
     /**
@@ -89,6 +91,13 @@ class ExcelGenerator(private val context: Context) {
         try {
             val presupuesto = recopilarDatos(habitaciones, partidaRepository)
 
+            // Calcular total con gastos generales e IVA (misma fórmula que en escribirExcel)
+            val costoDirecto = presupuesto.totalGeneral
+            val gastosGenerales = redondear2(costoDirecto * PORCENTAJE_GASTOS_GENERALES)
+            val costoNeto = redondear2(costoDirecto + gastosGenerales)
+            val iva = redondear2(costoNeto * PORCENTAJE_IVA)
+            val costoTotal = redondear2(costoNeto + iva)
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val contentValues = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, fileName)
@@ -100,8 +109,8 @@ class ExcelGenerator(private val context: Context) {
                     context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                         escribirExcel(outputStream, inspeccion, presupuesto)
                     }
-                    Log.i(TAG, "Excel generado en Descargas: $fileName")
-                    AppResult.Success(ExcelResult(uri = uri, file = null, fileName = fileName))
+                    Log.i(TAG, "Excel generado en Descargas: $fileName (Total: $costoTotal)")
+                    AppResult.Success(ExcelResult(uri = uri, file = null, fileName = fileName, totalPresupuesto = costoTotal))
                 } else {
                     AppResult.Error("No se pudo crear el archivo en Descargas. Verifique permisos de almacenamiento.")
                 }
@@ -112,7 +121,7 @@ class ExcelGenerator(private val context: Context) {
                     escribirExcel(outputStream, inspeccion, presupuesto)
                 }
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-                AppResult.Success(ExcelResult(uri = uri, file = file, fileName = fileName))
+                AppResult.Success(ExcelResult(uri = uri, file = file, fileName = fileName, totalPresupuesto = costoTotal))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error generando Excel: ${e.message}", e)

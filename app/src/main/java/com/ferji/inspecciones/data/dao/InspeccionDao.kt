@@ -26,4 +26,16 @@ interface InspeccionDao {
 
     @Query("UPDATE inspecciones SET estado = :nuevoEstado WHERE id = :id")
     suspend fun actualizarEstado(id: Long, nuevoEstado: String)
+
+    /** Marca una inspección como sincronizada con Firebase */
+    @Query("UPDATE inspecciones SET firebase_id = :firebaseId, sincronizado_firebase = 1 WHERE id = :id")
+    suspend fun marcarComoSincronizada(id: Long, firebaseId: String)
+
+    /** Obtiene inspecciones que aún no se han subido a Firebase (pendientes y completadas) */
+    @Query("SELECT * FROM inspecciones WHERE sincronizado_firebase = 0")
+    suspend fun getInspeccionesNoSincronizadas(): List<InspeccionEntity>
+
+    /** Actualiza el total del presupuesto de una inspección */
+    @Query("UPDATE inspecciones SET total_presupuesto = :total WHERE id = :id")
+    suspend fun actualizarTotalPresupuesto(id: Long, total: Double)
 }
