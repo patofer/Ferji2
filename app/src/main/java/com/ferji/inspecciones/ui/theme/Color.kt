@@ -3,28 +3,28 @@ package com.ferji.inspecciones.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ═══════════════════════════════════════════════════════════════
-//  PALETA FERJI INSPECCIONES — Material Design 3
-//  Generada con Material Theme Builder (azul corporativo base)
+//  PALETA FERJI INSPECCIONES — Basada en ferji.cl
+//  Azul navy corporativo + Naranja cálido + Grises profesionales
 // ═══════════════════════════════════════════════════════════════
 
-// ── Primary (Azul Corporativo) ──
-val Primary10 = Color(0xFF001B3D)
-val Primary20 = Color(0xFF003062)
-val Primary30 = Color(0xFF00468A)
-val Primary40 = Color(0xFF1A5FA6)   // ← Primary Light
-val Primary80 = Color(0xFFA4C9FF)   // ← Primary Dark
-val Primary90 = Color(0xFFD3E4FF)
-val Primary95 = Color(0xFFEAF1FF)
+// ── Primary (Azul Navy Corporativo — ferji.cl) ──
+val Primary10 = Color(0xFF001229)
+val Primary20 = Color(0xFF0A2540)
+val Primary30 = Color(0xFF153660)
+val Primary40 = Color(0xFF1B4F8A)   // ← Primary Light (azul navy ferji)
+val Primary80 = Color(0xFF9CBFEB)   // ← Primary Dark
+val Primary90 = Color(0xFFCFE0F7)
+val Primary95 = Color(0xFFE8F0FB)
 val Primary100 = Color(0xFFFFFFFF)
 
-// ── Secondary (Slate / Gris Azulado) ──
-val Secondary10 = Color(0xFF101C2B)
-val Secondary20 = Color(0xFF253140)
-val Secondary30 = Color(0xFF3B4858)
-val Secondary40 = Color(0xFF535F70)  // ← Secondary Light
-val Secondary80 = Color(0xFFBBC7DB)  // ← Secondary Dark
-val Secondary90 = Color(0xFFD7E3F8)
-val Secondary95 = Color(0xFFECF0FF)
+// ── Secondary (Naranja Corporativo Ferji — ferji.cl) ──
+val Secondary10 = Color(0xFF2D1600)
+val Secondary20 = Color(0xFF4A2800)
+val Secondary30 = Color(0xFF6B3D00)
+val Secondary40 = Color(0xFFD97B1A)  // ← Naranja corporativo ferji
+val Secondary80 = Color(0xFFFFCC80)  // ← Naranja claro
+val Secondary90 = Color(0xFFFFE0B2)
+val Secondary95 = Color(0xFFFFF3E0)
 
 // ── Tertiary (Verde Operativo / Éxito) ──
 val Tertiary10 = Color(0xFF002114)
@@ -78,14 +78,18 @@ val NeutralVariant80 = Color(0xFFC3C6CF)
 val NeutralVariant90 = Color(0xFFDFE2EB)
 val NeutralVariant95 = Color(0xFFEDF0F9)
 
-// ── Colores Semánticos de la App ──
-val FerjiOrange = Color(0xFFE67E22)
+// ── Colores Semánticos de la App (ferji.cl) ──
+val FerjiOrange = Color(0xFFD97B1A)      // Naranja corporativo Ferji
 val FerjiOrangeLight = Color(0xFFFFF3E0)
-val FerjiAmber = Color(0xFFF39C12)
+val FerjiAmber = Color(0xFFF5A623)
 val FerjiGreen = Color(0xFF27AE60)
 val FerjiGreenLight = Color(0xFFE8F5E9)
 val FerjiRed = Color(0xFFE74C3C)
 val FerjiRedLight = Color(0xFFFDE8E8)
+val FerjiNavy = Color(0xFF1B4F8A)        // Azul navy corporativo Ferji
+val FerjiNavyDark = Color(0xFF0A2540)    // Azul oscuro profundo Ferji
+val FerjiVerde = Color(0xFF61CE70)       // Verde corporativo Ferji (ferji.cl)
+val FerjiVerdeDark = Color(0xFF1B5E2A)   // Verde oscuro profundo Ferji
 
 // Colores para status badges
 val StatusPending = Color(0xFFF39C12)

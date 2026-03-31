@@ -5,9 +5,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,24 +16,22 @@ import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ferji.inspecciones.data.repository.UserRoles
 import com.ferji.inspecciones.ui.components.FerjiAnimatedSplash
-import com.ferji.inspecciones.ui.components.FerjiDotLogo
-import com.ferji.inspecciones.ui.components.FerjiTitleBar
 import com.ferji.inspecciones.ui.theme.*
 import com.ferji.inspecciones.viewmodels.MainViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -86,7 +84,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PANTALLA BIENVENIDA — Material Design 3
+//  PANTALLA BIENVENIDA — Identidad Ferji.cl
 // ═══════════════════════════════════════════════════════════════
 @Composable
 fun PantallaBienvenida(
@@ -96,240 +94,386 @@ fun PantallaBienvenida(
     onCerrarSesionClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Gradiente decorativo superior
-            Box(
+    // ── Animaciones de entrada ──
+    val logoScale = remember { Animatable(0.6f) }
+    val contentAlpha = remember { Animatable(0f) }
+    val cardAlpha = remember { Animatable(0f) }
+    val buttonAlpha = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        logoScale.animateTo(1f, animationSpec = tween(600, easing = EaseOutBack))
+    }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(200)
+        contentAlpha.animateTo(1f, animationSpec = tween(500, easing = EaseInOutCubic))
+    }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(400)
+        cardAlpha.animateTo(1f, animationSpec = tween(500, easing = EaseInOutCubic))
+    }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(600)
+        buttonAlpha.animateTo(1f, animationSpec = tween(500, easing = EaseInOutCubic))
+    }
+
+    val esAdmin = userRole == UserRoles.ADMIN
+    val initials = userName.split(" ")
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar()?.toString() }
+        .joinToString("")
+        .ifEmpty { "U" }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // ── Fondo blanco limpio ──
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+        )
+
+        // ── Franja verde sutil superior ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .align(Alignment.TopCenter)
+                .background(FerjiVerde)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = Spacing.xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // ── Logo de la empresa ──
+            Image(
+                painter = painterResource(id = R.drawable.logo_ferji),
+                contentDescription = "Logo Ferji",
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(280.dp)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                                Color.Transparent
-                            )
-                        )
-                    )
+                    .scale(logoScale.value)
+                    .size(130.dp)
             )
 
-            Column(
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            // ── Marca FERJI ──
+            Text(
+                text = "FERJI",
+                modifier = Modifier.alpha(contentAlpha.value),
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 8.sp
+                ),
+                color = FerjiVerde
+            )
+            Text(
+                text = "INSPECCIONES",
+                modifier = Modifier.alpha(contentAlpha.value),
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 6.sp
+                ),
+                color = Color(0xFF555555)
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.lg))
+
+            // ── Línea verde decorativa ──
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = Spacing.xl),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .alpha(contentAlpha.value)
+                    .width(60.dp)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(FerjiVerde)
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            // ── Tarjeta de usuario ──
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(cardAlpha.value),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF5F5F5)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                // Logo con borde decorativo
-                Box(
+                Column(
                     modifier = Modifier
-                        .size(160.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(
-                            2.dp,
-                            MaterialTheme.colorScheme.outlineVariant,
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(Spacing.lg),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.logo_ferji),
-                        contentDescription = "Logo de Ferji",
-                        modifier = Modifier.size(120.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(Spacing.xxl))
-
-                // Título FERJI con identidad
-                FerjiTitleBar(compact = false)
-
-                Spacer(modifier = Modifier.height(Spacing.xl))
-
-                Text(
-                    text = "¡Bienvenido!",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                Spacer(modifier = Modifier.height(Spacing.xs))
-
-                Text(
-                    text = userName,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                // Badge de administrador
-                if (userRole == UserRoles.ADMIN) {
-                    Spacer(modifier = Modifier.height(Spacing.md))
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
+                    // Avatar con iniciales
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(FerjiVerde),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                        Text(
+                            text = initials,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(Spacing.md))
+
+                    Text(
+                        text = "¡Bienvenido!",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFF999999),
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 2.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(Spacing.xxs))
+
+                    Text(
+                        text = userName,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color(0xFF333333),
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+
+                    // Badge de administrador
+                    if (esAdmin) {
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = FerjiVerde.copy(alpha = 0.12f)
                         ) {
-                            Icon(
-                                Icons.Outlined.AdminPanelSettings,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = "ADMINISTRADOR",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.AdminPanelSettings,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = FerjiVerdeDark
+                                )
+                                Text(
+                                    text = "ADMINISTRADOR",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = FerjiVerdeDark,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                            }
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(Spacing.huge))
-
-                // Botón Ingresar
-                Button(
-                    onClick = onIngresarClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(ComponentSize.buttonHeight),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Login,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(Spacing.sm))
-                    Text(
-                        "Ingresar",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(Spacing.md))
-
-                // Botón cambiar usuario
-                TextButton(
-                    onClick = onCerrarSesionClick,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        Icons.Outlined.SwapHoriz,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(Spacing.xs))
-                    Text("Cambiar de usuario")
-                }
             }
+
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            // ── Botón Ingresar (verde corporativo Ferji) ──
+            Button(
+                onClick = onIngresarClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(ComponentSize.buttonHeight)
+                    .alpha(buttonAlpha.value),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = FerjiVerde,
+                    contentColor = Color.White
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Login,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(Spacing.sm))
+                Text(
+                    "Ingresar al Sistema",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.sm))
+
+            // Botón cambiar usuario
+            TextButton(
+                onClick = onCerrarSesionClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(buttonAlpha.value)
+            ) {
+                Icon(
+                    Icons.Outlined.SwapHoriz,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = Color(0xFF999999)
+                )
+                Spacer(Modifier.width(Spacing.xs))
+                Text(
+                    "Cambiar de usuario",
+                    color = Color(0xFF999999)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.lg))
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PANTALLA INICIAL — Material Design 3
+//  PANTALLA INICIAL (LoggedOut) — Identidad Ferji.cl
 // ═══════════════════════════════════════════════════════════════
 @Composable
 fun PantallaInicial(modifier: Modifier = Modifier, onIngresarClick: () -> Unit) {
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Gradiente decorativo
-            Box(
+    // Animaciones
+    val logoScale = remember { Animatable(0.5f) }
+    val contentAlpha = remember { Animatable(0f) }
+    val buttonAlpha = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        logoScale.animateTo(1f, animationSpec = tween(700, easing = EaseOutBack))
+    }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(300)
+        contentAlpha.animateTo(1f, animationSpec = tween(500, easing = EaseInOutCubic))
+    }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(600)
+        buttonAlpha.animateTo(1f, animationSpec = tween(500, easing = EaseInOutCubic))
+    }
+
+    // Pulse sutil del logo
+    val infiniteTransition = rememberInfiniteTransition(label = "logoPulse")
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = EaseInOutCubic),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // ── Fondo blanco limpio ──
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+        )
+
+        // ── Franja verde sutil superior ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .align(Alignment.TopCenter)
+                .background(FerjiVerde)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = Spacing.xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Logo con animación
+            Image(
+                painter = painterResource(id = R.drawable.logo_ferji),
+                contentDescription = "Logo Ferji",
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
-                            )
-                        )
-                    )
+                    .scale(logoScale.value * pulse)
+                    .size(160.dp)
             )
 
-            Column(
+            Spacer(modifier = Modifier.height(Spacing.xl))
+
+            // Marca
+            Text(
+                text = "FERJI",
+                modifier = Modifier.alpha(contentAlpha.value),
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 8.sp
+                ),
+                color = FerjiVerde
+            )
+            Text(
+                text = "INSPECCIONES",
+                modifier = Modifier.alpha(contentAlpha.value),
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 6.sp
+                ),
+                color = Color(0xFF555555)
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            // Línea verde decorativa
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = Spacing.xl),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .alpha(contentAlpha.value)
+                    .width(50.dp)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(FerjiVerde)
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.lg))
+
+            Text(
+                text = "Gestión profesional de inspecciones\nde daños por siniestro",
+                modifier = Modifier.alpha(contentAlpha.value),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF888888),
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.huge))
+
+            // Botón verde corporativo Ferji
+            Button(
+                onClick = onIngresarClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(ComponentSize.buttonHeight)
+                    .alpha(buttonAlpha.value),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = FerjiVerde,
+                    contentColor = Color.White
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
-                // Logo corporativo cuadrado con 4 puntos
-                Box(
-                    modifier = Modifier
-                        .size(140.dp)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(
-                            brush = Brush.linearGradient(
-                                colors = listOf(Primary40, Primary30)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    FerjiDotLogo(
-                        size = 84.dp,
-                        dotColor = Color.White,
-                        animated = true
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(Spacing.xxl))
-
-                Text(
-                    text = "Inspecciones de\nDaños por Sismo",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    textAlign = TextAlign.Center
+                Icon(
+                    Icons.AutoMirrored.Filled.Login,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
                 )
-
-                Spacer(modifier = Modifier.height(Spacing.sm))
-
+                Spacer(Modifier.width(Spacing.sm))
                 Text(
-                    text = "Gestión profesional de inspecciones",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    "Iniciar Sesión",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
                 )
-
-                Spacer(modifier = Modifier.height(Spacing.huge))
-
-                Button(
-                    onClick = onIngresarClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(ComponentSize.buttonHeight),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Login,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(Spacing.sm))
-                    Text(
-                        "Iniciar Sesión",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
             }
+
+            Spacer(modifier = Modifier.height(Spacing.huge))
         }
     }
 }
