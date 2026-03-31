@@ -104,8 +104,8 @@ fun PantallaMenuPrincipal(esAdministrador: Boolean) {
             )
 
             FerjiMenuCard(
-                title = "Inspecciones Pendientes",
-                subtitle = "Ver inspecciones guardadas",
+                title = "Listado de Inspecciones",
+                subtitle = "Ver, retomar o eliminar inspecciones",
                 icon = Icons.Outlined.Assignment,
                 gradientColors = listOf(Secondary40, Secondary30),
                 onClick = {

@@ -156,5 +156,31 @@ class InspeccionRemoteDataSource @Inject constructor(
             false
         }
     }
+
+    /**
+     * Elimina una inspección y sus habitaciones de Firestore.
+     */
+    suspend fun eliminarInspeccion(firebaseId: String): Boolean {
+        return try {
+            val batch = firestore.batch()
+            val inspeccionRef = firestore.collection(COLLECTION_INSPECCIONES).document(firebaseId)
+
+            // Eliminar habitaciones de la subcolección
+            val habitaciones = inspeccionRef.collection(SUBCOLLECTION_HABITACIONES).get().await()
+            for (doc in habitaciones.documents) {
+                batch.delete(doc.reference)
+            }
+
+            // Eliminar el documento de la inspección
+            batch.delete(inspeccionRef)
+            batch.commit().await()
+
+            Log.i(TAG, "Inspección eliminada de Firebase: $firebaseId")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error eliminando inspección de Firebase: ${e.message}", e)
+            false
+        }
+    }
 }
 

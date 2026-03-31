@@ -47,4 +47,8 @@ class InspeccionRepository @Inject constructor(
     suspend fun actualizarTotalPresupuesto(id: Long, total: Double) {
         inspeccionDao.actualizarTotalPresupuesto(id, total)
     }
+
+    suspend fun deleteById(id: Long) {
+        inspeccionDao.deleteById(id)
+    }
 }

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ferji.inspecciones.data.dao.HabitacionDao
+import com.ferji.inspecciones.data.remote.InspeccionRemoteDataSource
 import com.ferji.inspecciones.data.repository.InspeccionRepository
 import com.ferji.inspecciones.ui.components.FerjiEmptyState
 import com.ferji.inspecciones.ui.components.FerjiGradientDivider
@@ -40,6 +42,7 @@ import com.ferji.inspecciones.ui.theme.*
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
@@ -50,6 +53,7 @@ class ListaInspeccionesActivity : ComponentActivity() {
 
     @Inject lateinit var repository: InspeccionRepository
     @Inject lateinit var habitacionDao: HabitacionDao
+    @Inject lateinit var remoteDataSource: InspeccionRemoteDataSource
 
     private lateinit var retomarInspeccionLauncher: ActivityResultLauncher<Intent>
     private var inspeccionIdRetomada: Long = -1L
@@ -80,6 +84,7 @@ class ListaInspeccionesActivity : ComponentActivity() {
                     PantallaListaInspecciones(
                         repository = repository,
                         habitacionDao = habitacionDao,
+                        remoteDataSource = remoteDataSource,
                         onBack = { finish() },
                         onRetomarInspeccion = { inspeccionId ->
                             inspeccionIdRetomada = inspeccionId
@@ -99,6 +104,7 @@ class ListaInspeccionesActivity : ComponentActivity() {
 fun PantallaListaInspecciones(
     repository: InspeccionRepository,
     habitacionDao: HabitacionDao,
+    remoteDataSource: InspeccionRemoteDataSource? = null,
     onBack: () -> Unit = {},
     onRetomarInspeccion: (Long) -> Unit = {}
 ) {
@@ -107,6 +113,11 @@ fun PantallaListaInspecciones(
     var habitacionesCount by remember { mutableStateOf(mapOf<Long, Int>()) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // Estado para eliminación
+    var inspeccionAEliminar by remember { mutableStateOf<com.ferji.inspecciones.data.model.InspeccionEntity?>(null) }
+    var eliminando by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         launch(Dispatchers.IO) {
@@ -277,6 +288,9 @@ fun PantallaListaInspecciones(
                                     if (inspeccion.estado == "PENDIENTE") {
                                         onRetomarInspeccion(inspeccion.id)
                                     }
+                                },
+                                onEliminar = {
+                                    inspeccionAEliminar = inspeccion
                                 }
                             )
                         }
@@ -286,13 +300,100 @@ fun PantallaListaInspecciones(
             }
         }
     }
+
+    // ═══ DIÁLOGO DE CONFIRMACIÓN DE ELIMINACIÓN ═══
+    if (inspeccionAEliminar != null) {
+        val insp = inspeccionAEliminar!!
+        AlertDialog(
+            onDismissRequest = {
+                if (!eliminando) inspeccionAEliminar = null
+            },
+            icon = {
+                Icon(
+                    Icons.Outlined.DeleteForever,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Eliminar Inspección",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                    Text("¿Estás seguro de eliminar esta inspección?")
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    FerjiInfoRow(label = "Siniestro", value = insp.siniestro)
+                    FerjiInfoRow(label = "RUT", value = insp.rut)
+                    FerjiInfoRow(label = "Dirección", value = insp.direccion)
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Text(
+                        "⚠️ Esta acción no se puede deshacer",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        eliminando = true
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    // Eliminar de Firebase si tiene firebaseId
+                                    if (insp.firebaseId.isNotBlank() && remoteDataSource != null) {
+                                        remoteDataSource.eliminarInspeccion(insp.firebaseId)
+                                    }
+                                    // Eliminar de Room (CASCADE borra habitaciones)
+                                    repository.deleteById(insp.id)
+                                }
+                                inspeccionAEliminar = null
+                            } catch (e: Exception) {
+                                inspeccionAEliminar = null
+                            } finally {
+                                eliminando = false
+                            }
+                        }
+                    },
+                    enabled = !eliminando,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    if (eliminando) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onError
+                        )
+                        Spacer(Modifier.width(Spacing.xs))
+                    }
+                    Text(if (eliminando) "Eliminando..." else "Eliminar")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { inspeccionAEliminar = null },
+                    enabled = !eliminando
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
 @Composable
 fun TarjetaInspeccion(
     inspeccion: com.ferji.inspecciones.data.model.InspeccionEntity,
     cantidadHabitaciones: Int = 0,
-    onRetomar: () -> Unit = {}
+    onRetomar: () -> Unit = {},
+    onEliminar: () -> Unit = {}
 ) {
     val statusColor = when (inspeccion.estado) {
         "PENDIENTE" -> FerjiOrange
@@ -420,6 +521,29 @@ fun TarjetaInspeccion(
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
+                    }
+
+                    // Botón eliminar (siempre visible)
+                    FilledTonalButton(
+                        onClick = onEliminar,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Eliminar",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }

@@ -832,6 +832,91 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
+        /* ═══ BOTÓN ELIMINAR ═══ */
+        .btn-delete {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid rgba(244,63,94,0.3);
+            border-radius: var(--radius-xs);
+            color: var(--accent-rose);
+            font-size: 0.8rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-delete:hover { background: var(--accent-rose); color: white; border-color: var(--accent-rose); }
+        .td-actions { display: flex; gap: 4px; }
+
+        /* ═══ MODAL CONFIRMACIÓN ═══ */
+        .confirm-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+            z-index: 1100;
+            justify-content: center;
+            align-items: center;
+        }
+        .confirm-overlay.active { display: flex; }
+        .confirm-box {
+            background: var(--surface);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            padding: 28px;
+            width: 90%;
+            max-width: 420px;
+            text-align: center;
+        }
+        .confirm-icon {
+            font-size: 2.5rem;
+            margin-bottom: 14px;
+        }
+        .confirm-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .confirm-text {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .confirm-text strong { color: var(--text); }
+        .confirm-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .btn-confirm-cancel {
+            padding: 10px 24px;
+            background: var(--surface-hover);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-confirm-cancel:hover { background: var(--surface-elevated); color: var(--text); }
+        .btn-confirm-delete {
+            padding: 10px 24px;
+            background: var(--accent-rose);
+            border: none;
+            border-radius: var(--radius-sm);
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-confirm-delete:hover { background: #e11d48; }
+        .btn-confirm-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+
         /* ═══ FOOTER ═══ */
         .footer {
             text-align: center;
@@ -1065,7 +1150,6 @@
         <input class="login-input" type="email" id="loginEmail" placeholder="Email" />
         <input class="login-input" type="password" id="loginPassword" placeholder="Contraseña" />
         <button class="btn-primary" onclick="loginConEmail()">Iniciar Sesión</button>
-        <button class="btn-secondary" onclick="loginAnonimo()">⚡ Acceso Rápido</button>
         <p class="login-error" id="loginError"></p>
     </div>
 </div>
@@ -1476,6 +1560,19 @@
     </div>
 </div>
 
+<!-- ═══ MODAL CONFIRMACIÓN ELIMINAR ═══ -->
+<div class="confirm-overlay" id="confirmOverlay" onclick="cerrarConfirmacion(event)">
+    <div class="confirm-box" onclick="event.stopPropagation()">
+        <div class="confirm-icon">🗑️</div>
+        <div class="confirm-title">Eliminar Inspección</div>
+        <div class="confirm-text" id="confirmText">¿Estás seguro?</div>
+        <div class="confirm-buttons">
+            <button class="btn-confirm-cancel" onclick="cerrarConfirmacion()">Cancelar</button>
+            <button class="btn-confirm-delete" id="btnConfirmDelete" onclick="confirmarEliminacion()">🗑️ Eliminar</button>
+        </div>
+    </div>
+</div>
+
 <!-- ═══ FIREBASE SDK ═══ -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -1652,7 +1749,7 @@
                 <td>${totalHab}</td>
                 <td style="font-weight:600; color: var(--accent-emerald);">${totalPresStr}</td>
                 <td><span class="td-badge ${badgeClass}">${insp.estado || 'N/A'}</span></td>
-                <td><button class="btn-sm" onclick="verDetalle('${insp.id}')">Ver detalle</button></td>
+                <td><div class="td-actions"><button class="btn-sm" onclick="verDetalle('${insp.id}')">Ver</button><button class="btn-delete" onclick="pedirEliminacion('${insp.id}')">🗑️</button></div></td>
             </tr>`;
         }).join('');
     }
@@ -1903,6 +2000,75 @@
         ['cfgEnviarInspeccion', 'cfgEnviarPresupuesto', 'cfgEnviarImagenes'].forEach(id => {
             document.getElementById(id).addEventListener('change', actualizarResumenConfig);
         });
+    });
+
+    // ═══ ELIMINAR INSPECCIÓN ═══
+    let inspeccionIdAEliminar = null;
+
+    function pedirEliminacion(inspeccionId) {
+        const insp = todasLasInspecciones.find(i => i.id === inspeccionId);
+        if (!insp) return;
+        inspeccionIdAEliminar = inspeccionId;
+        document.getElementById('confirmText').innerHTML = `
+            ¿Estás seguro de eliminar esta inspección?<br/><br/>
+            <strong>Siniestro:</strong> ${insp.siniestro || '-'}<br/>
+            <strong>RUT:</strong> ${insp.rut || '-'}<br/>
+            <strong>Dirección:</strong> ${insp.direccion || '-'}<br/><br/>
+            <span style="color: var(--accent-rose);">⚠️ Esta acción no se puede deshacer. Se eliminarán todos los datos y habitaciones asociadas.</span>
+        `;
+        document.getElementById('confirmOverlay').classList.add('active');
+    }
+
+    function cerrarConfirmacion(event) {
+        if (!event || event.target === document.getElementById('confirmOverlay')) {
+            document.getElementById('confirmOverlay').classList.remove('active');
+            inspeccionIdAEliminar = null;
+        }
+    }
+
+    async function confirmarEliminacion() {
+        if (!inspeccionIdAEliminar) return;
+
+        const btn = document.getElementById('btnConfirmDelete');
+        btn.disabled = true;
+        btn.textContent = '⏳ Eliminando...';
+
+        try {
+            const inspeccionRef = db.collection('inspecciones').doc(inspeccionIdAEliminar);
+
+            // 1. Eliminar habitaciones de la subcolección
+            const habSnapshot = await inspeccionRef.collection('habitaciones').get();
+            const batch = db.batch();
+            habSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+            batch.delete(inspeccionRef);
+            await batch.commit();
+
+            console.log('Inspección eliminada:', inspeccionIdAEliminar);
+
+            // 2. Actualizar lista local
+            todasLasInspecciones = todasLasInspecciones.filter(i => i.id !== inspeccionIdAEliminar);
+            aplicarFiltros();
+            actualizarStats();
+            actualizarDashboard();
+
+            cerrarConfirmacion();
+            alert('✅ Inspección eliminada correctamente.');
+
+        } catch (err) {
+            console.error('Error eliminando inspección:', err);
+            alert('❌ Error al eliminar: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🗑️ Eliminar';
+            inspeccionIdAEliminar = null;
+        }
+    }
+
+    // Cerrar confirmación con Escape
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            cerrarConfirmacion();
+        }
     });
 
     // ═══════════════════════════════════════════

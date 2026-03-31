@@ -38,4 +38,8 @@ interface InspeccionDao {
     /** Actualiza el total del presupuesto de una inspección */
     @Query("UPDATE inspecciones SET total_presupuesto = :total WHERE id = :id")
     suspend fun actualizarTotalPresupuesto(id: Long, total: Double)
+
+    /** Elimina una inspección por su ID (las habitaciones se borran por CASCADE) */
+    @Query("DELETE FROM inspecciones WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
