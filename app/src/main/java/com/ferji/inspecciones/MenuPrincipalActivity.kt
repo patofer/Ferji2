@@ -63,15 +63,17 @@ fun PantallaMenuPrincipal(esAdministrador: Boolean) {
                     FerjiTitleBar(subtitle = "Menú Principal")
                 },
                 actions = {
-                    IconButton(onClick = {
-                        val intent = Intent(context, ConfiguracionActivity::class.java)
-                        context.startActivity(intent)
-                    }) {
-                        Icon(
-                            Icons.Outlined.Settings,
-                            contentDescription = "Configuración",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    if (esAdministrador) {
+                        IconButton(onClick = {
+                            val intent = Intent(context, ConfiguracionActivity::class.java)
+                            context.startActivity(intent)
+                        }) {
+                            Icon(
+                                Icons.Outlined.Settings,
+                                contentDescription = "Configuración",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.largeTopAppBarColors(
