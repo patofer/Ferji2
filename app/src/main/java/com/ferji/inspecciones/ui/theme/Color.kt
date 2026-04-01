@@ -2,8 +2,7 @@ package com.ferji.inspecciones.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ═══════════════════════════════════════════════════════════════
-//  PALETA FERJI INSPECCIONES — Basada en ferji.cl
+// ══════════════════════════════════════════════════════════════//  PALETA FERJI INSPECCIONES — Basada en ferji.cl
 //  Azul navy corporativo + Naranja cálido + Grises profesionales
 // ═══════════════════════════════════════════════════════════════
 
