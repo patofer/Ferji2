@@ -194,8 +194,11 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                     Log.w(TAG, "No se pudo generar el presupuesto Excel para reenvío")
                 }
 
-                // Adjuntar fotos si la configuración lo permite
-                if (emailSettings.enviarImagenesAlInspector) {
+                // Adjuntar fotos SOLO si la configuración lo permite (admin o inspector)
+                val necesitaFotosEnCorreo = emailSettings.enviarImagenesAlAdmin || emailSettings.enviarImagenesAlInspector
+                var numFotosEnDispositivo = 0
+
+                if (necesitaFotosEnCorreo) {
                     val siniestroLimpio = inspeccion.siniestro.replace("[^a-zA-Z0-9]".toRegex(), "")
                     for (hab in habitaciones) {
                         val fotos = hab.getFotosList()
@@ -224,7 +227,11 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                             }
                         }
                     }
-                    Log.d(TAG, "Total fotos adjuntadas: ${adjuntos.size - (if (adjuntoExcel != null) 2 else 1)}")
+                    Log.d(TAG, "Total fotos adjuntadas: ${adjuntos.count { it.mimeType.startsWith("image/") }}")
+                } else {
+                    // Contar fotos para informar en el correo que están en el dispositivo
+                    numFotosEnDispositivo = habitaciones.sumOf { it.getFotosList().count { f -> f.isNotBlank() } }
+                    Log.d(TAG, "Fotos NO adjuntadas (config desactivada). $numFotosEnDispositivo fotos en dispositivo.")
                 }
 
                 // Determinar qué documentos se adjuntaron para el cuerpo del email
@@ -232,6 +239,13 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                 val numFotos = adjuntos.count { it.mimeType.startsWith("image/") }
 
                 val asunto = "Informe Inspección: Siniestro ${inspeccion.siniestro} - RUT ${inspeccion.rut}"
+                val notaFotos = if (numFotosEnDispositivo > 0 && numFotos == 0) {
+                    """<p style="color: #666; font-size: 12px; border-left: 3px solid #61CE70; padding-left: 10px;">
+                        📸 <strong>$numFotosEnDispositivo fotografías</strong> fueron tomadas durante la inspección
+                        y se encuentran guardadas en el dispositivo del inspector
+                        (carpeta: <em>Descargas/Ferji_Inspecciones/${inspeccion.siniestro}</em>).
+                    </p>"""
+                } else ""
                 val cuerpoHtml = """
                     <html><body>
                     <p>Estimado/a,</p>
@@ -249,6 +263,7 @@ class ReenvioInspeccionesViewModel @Inject constructor(
                         ${if (tieneExcel) "<li>Presupuesto de Reparación (Excel)</li>" else ""}
                         ${if (numFotos > 0) "<li>Fotografías de la inspección ($numFotos imágenes)</li>" else ""}
                     </ul>
+                    $notaFotos
                     <p>Saludos cordiales,<br/><strong>Equipo Ferji Inspecciones</strong></p>
                     </body></html>
                 """.trimIndent()

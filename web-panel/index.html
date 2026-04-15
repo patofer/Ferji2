@@ -1582,13 +1582,28 @@
 
                     <div class="toggle-row">
                         <div class="toggle-info">
-                            <h4>Enviar Imágenes</h4>
-                            <p>El inspector recibe las fotografías</p>
+                            <h4>Enviar Imágenes al Inspector</h4>
+                            <p>El inspector recibe las fotografías por correo</p>
                         </div>
                         <label class="toggle-switch">
                             <input type="checkbox" id="cfgEnviarImagenes" />
                             <span class="toggle-slider"></span>
                         </label>
+                    </div>
+
+                    <div class="toggle-row">
+                        <div class="toggle-info">
+                            <h4>Enviar Imágenes al Admin</h4>
+                            <p style="color: var(--accent-amber);">⚠️ Con muchas fotos puede fallar el envío</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cfgEnviarImagenesAdmin" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div style="background: var(--surface-elevated); border-radius: 8px; padding: 10px 14px; margin-top: 8px; border-left: 3px solid var(--accent-emerald);">
+                        <p style="font-size: 0.75rem; color: var(--accent-emerald); margin: 0;">📸 Las fotos siempre se guardan en el dispositivo: <strong>Descargas/Ferji_Inspecciones/{siniestro}/</strong></p>
                     </div>
 
                     <button class="btn-save" id="btnGuardarConfig" onclick="guardarConfiguracion()">
@@ -2017,6 +2032,7 @@
                 document.getElementById('cfgEnviarInspeccion').checked = d.enviarInspeccionAlInspector || false;
                 document.getElementById('cfgEnviarPresupuesto').checked = d.enviarPresupuestoAlInspector || false;
                 document.getElementById('cfgEnviarImagenes').checked = d.enviarImagenesAlInspector || false;
+                document.getElementById('cfgEnviarImagenesAdmin').checked = d.enviarImagenesAlAdmin || false;
                 actualizarResumenConfig();
             }
         } catch (err) { console.error('Error cargando config:', err); }
@@ -2031,7 +2047,8 @@
                 emailAdmin, emailCc: document.getElementById('cfgEmailCc').value.trim(),
                 enviarInspeccionAlInspector: document.getElementById('cfgEnviarInspeccion').checked,
                 enviarPresupuestoAlInspector: document.getElementById('cfgEnviarPresupuesto').checked,
-                enviarImagenesAlInspector: document.getElementById('cfgEnviarImagenes').checked
+                enviarImagenesAlInspector: document.getElementById('cfgEnviarImagenes').checked,
+                enviarImagenesAlAdmin: document.getElementById('cfgEnviarImagenesAdmin').checked
             }, { merge: true });
             mostrarMsgGuardado('✅ Configuración guardada correctamente.', true);
             actualizarResumenConfig();
@@ -2053,10 +2070,12 @@
             <p><strong>PDF al inspector:</strong> ${document.getElementById('cfgEnviarInspeccion').checked ? '✅ Sí' : '❌ No'}</p>
             <p><strong>Excel al inspector:</strong> ${document.getElementById('cfgEnviarPresupuesto').checked ? '✅ Sí' : '❌ No'}</p>
             <p><strong>Imágenes al inspector:</strong> ${document.getElementById('cfgEnviarImagenes').checked ? '✅ Sí' : '❌ No'}</p>
+            <p><strong>Imágenes al admin:</strong> ${document.getElementById('cfgEnviarImagenesAdmin').checked ? '✅ Sí' : '❌ No'}</p>
+            <p style="color: var(--accent-emerald); font-size: 0.7rem; margin-top: 6px;">📸 Fotos siempre se guardan en el dispositivo</p>
         `;
     }
     document.addEventListener('DOMContentLoaded', () => {
-        ['cfgEnviarInspeccion', 'cfgEnviarPresupuesto', 'cfgEnviarImagenes'].forEach(id => {
+        ['cfgEnviarInspeccion', 'cfgEnviarPresupuesto', 'cfgEnviarImagenes', 'cfgEnviarImagenesAdmin'].forEach(id => {
             document.getElementById(id).addEventListener('change', actualizarResumenConfig);
         });
     });

@@ -299,6 +299,40 @@ fun PantallaConfiguracion(
                                 onCheckedChange = viewModel::onEnviarImagenesAlInspectorChange
                             )
                         }
+
+                        // Toggle: Enviar Imágenes al Admin
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Enviar Imágenes al Administrador",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "⚠️ Con muchas fotos puede fallar el envío",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                )
+                            }
+                            Switch(
+                                checked = state.enviarImagenesAlAdmin,
+                                onCheckedChange = viewModel::onEnviarImagenesAlAdminChange
+                            )
+                        }
+
+                        // Nota informativa sobre fotos
+                        Text(
+                            text = "📸 Las fotos siempre se guardan en: Descargas/Ferji_Inspecciones/",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
                     }
                 }
 
@@ -344,6 +378,18 @@ fun PantallaConfiguracion(
                         Text(
                             "Imágenes al inspector: $imagenesStatus",
                             style = MaterialTheme.typography.bodySmall
+                        )
+
+                        val imagenesAdminStatus = if (state.enviarImagenesAlAdmin) "Sí" else "No"
+                        Text(
+                            "Imágenes al admin: $imagenesAdminStatus",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        Text(
+                            "📸 Fotos siempre se guardan en el dispositivo",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }

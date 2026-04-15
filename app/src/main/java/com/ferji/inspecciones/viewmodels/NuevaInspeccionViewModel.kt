@@ -334,50 +334,58 @@ class NuevaInspeccionViewModel @Inject constructor(
         val excelGenerator = ExcelGenerator(applicationContext)
         val excelResult = excelGenerator.generarPresupuesto(inspeccion, habitaciones, partidaRepository)
 
-        // --- Recopilar fotos de todas las habitaciones ---
-        val adjuntosFotos = mutableListOf<EmailService.Adjunto>()
+        // ═══════════════════════════════════════════════
+        // GUARDAR FOTOS LOCALMENTE EN DESCARGAS
+        // ═══════════════════════════════════════════════
         val siniestroLimpio = inspeccion.siniestro.replace("[^a-zA-Z0-9]".toRegex(), "")
-        val codigoUnico = "${siniestroLimpio}_${System.currentTimeMillis() % 100000}"
+        val fotasGuardadas = guardarFotosLocalmente(habitaciones, siniestroLimpio)
+        Log.d("NuevaInspVM", "Fotos guardadas localmente: $fotasGuardadas de ${habitaciones.sumOf { it.getFotosList().size }}")
 
-        for (habitacion in habitaciones) {
-            val fotos = habitacion.getFotosList()
-            // Limpiar nombre de habitación para usar como nombre de archivo
-            val habNombre = habitacion.nombre
-                .replace("[^a-zA-ZáéíóúñÁÉÍÓÚÑ0-9 ]".toRegex(), "")
-                .trim()
-                .replace("\\s+".toRegex(), "_")
+        // ═══════════════════════════════════════════════
+        // PREPARAR FOTOS PARA ADJUNTAR (solo si config lo permite)
+        // ═══════════════════════════════════════════════
+        val adjuntosFotos = mutableListOf<EmailService.Adjunto>()
+        val necesitaFotosEnCorreo = emailSettings.enviarImagenesAlAdmin || emailSettings.enviarImagenesAlInspector
 
-            fotos.forEachIndexed { index, fotoPath ->
-                if (fotoPath.isNotBlank()) {
-                    val file = java.io.File(fotoPath)
-                    if (file.exists()) {
-                        try {
-                            val fotoUri = androidx.core.content.FileProvider.getUriForFile(
-                                applicationContext,
-                                "${applicationContext.packageName}.provider",
-                                file
-                            )
-                            val extension = file.extension.ifBlank { "jpg" }
-                            // Formato: Cocina_1_SIN12345_83721.jpg
-                            val nombreFoto = "${habNombre}_${index + 1}_${codigoUnico}.$extension"
-                            adjuntosFotos.add(
-                                EmailService.Adjunto(
-                                    uri = fotoUri,
-                                    nombreArchivo = nombreFoto,
-                                    mimeType = "image/$extension"
+        if (necesitaFotosEnCorreo) {
+            val codigoUnico = "${siniestroLimpio}_${System.currentTimeMillis() % 100000}"
+            for (habitacion in habitaciones) {
+                val fotos = habitacion.getFotosList()
+                val habNombre = habitacion.nombre
+                    .replace("[^a-zA-ZáéíóúñÁÉÍÓÚÑ0-9 ]".toRegex(), "")
+                    .trim()
+                    .replace("\\s+".toRegex(), "_")
+
+                fotos.forEachIndexed { index, fotoPath ->
+                    if (fotoPath.isNotBlank()) {
+                        val file = java.io.File(fotoPath)
+                        if (file.exists()) {
+                            try {
+                                val fotoUri = FileProvider.getUriForFile(
+                                    applicationContext,
+                                    "${applicationContext.packageName}.provider",
+                                    file
                                 )
-                            )
-                            Log.d("NuevaInspVM", "Foto preparada: $nombreFoto")
-                        } catch (e: Exception) {
-                            Log.e("NuevaInspVM", "Error preparando foto '$fotoPath': ${e.message}")
+                                val extension = file.extension.ifBlank { "jpg" }
+                                val nombreFoto = "${habNombre}_${index + 1}_${codigoUnico}.$extension"
+                                adjuntosFotos.add(
+                                    EmailService.Adjunto(
+                                        uri = fotoUri,
+                                        nombreArchivo = nombreFoto,
+                                        mimeType = "image/$extension"
+                                    )
+                                )
+                            } catch (e: Exception) {
+                                Log.e("NuevaInspVM", "Error preparando foto '$fotoPath': ${e.message}")
+                            }
                         }
-                    } else {
-                        Log.w("NuevaInspVM", "Archivo de foto no encontrado: $fotoPath")
                     }
                 }
             }
+            Log.d("NuevaInspVM", "Fotos preparadas para adjuntar por correo: ${adjuntosFotos.size}")
+        } else {
+            Log.d("NuevaInspVM", "Fotos NO se adjuntan al correo (config desactivada). Guardadas localmente.")
         }
-        Log.d("NuevaInspVM", "Total fotos recopiladas para adjuntar: ${adjuntosFotos.size}")
 
         // --- Preparar adjuntos base ---
         val nombrePdf = "Inspeccion_${inspeccion.siniestro}_${inspeccion.rut}.pdf"
@@ -401,7 +409,6 @@ class NuevaInspeccionViewModel @Inject constructor(
 
         if (adjuntoExcel != null) {
             Log.d("NuevaInspVM", "Excel generado: ${(excelResult as? com.ferji.inspecciones.domain.model.AppResult.Success)?.data?.fileName}")
-            // Guardar el total del presupuesto en Room
             val totalPresupuesto = (excelResult as? com.ferji.inspecciones.domain.model.AppResult.Success)?.data?.totalPresupuesto ?: 0.0
             if (totalPresupuesto > 0) {
                 inspeccionRepository.actualizarTotalPresupuesto(inspeccionId, totalPresupuesto)
@@ -417,19 +424,23 @@ class NuevaInspeccionViewModel @Inject constructor(
             ccList.add(emailSettings.emailCc)
         }
 
+        val totalFotosGuardadas = habitaciones.sumOf { it.getFotosList().count { f -> f.isNotBlank() } }
+
         // ═══════════════════════════════════════════════
-        // 1. EMAIL AL ADMINISTRADOR (siempre PDF + Excel + Fotos)
+        // 1. EMAIL AL ADMINISTRADOR (PDF + Excel + Fotos solo si config lo permite)
         // ═══════════════════════════════════════════════
         if (emailSettings.emailAdmin.isNotBlank() && emailSettings.emailAdmin.esEmailValido()) {
             val adjuntosAdmin = mutableListOf(adjuntoPdf)
             if (adjuntoExcel != null) adjuntosAdmin.add(adjuntoExcel)
-            adjuntosAdmin.addAll(adjuntosFotos) // Admin siempre recibe las fotos
+            // Solo adjuntar fotos al admin si la config lo permite
+            val fotosParaAdmin = if (emailSettings.enviarImagenesAlAdmin) adjuntosFotos.size else 0
+            if (emailSettings.enviarImagenesAlAdmin) adjuntosAdmin.addAll(adjuntosFotos)
 
             val ccAdmin = ccList.filterNot { it.equals(emailSettings.emailAdmin, ignoreCase = true) }.ifEmpty { null }
 
-            val cuerpoAdmin = buildCuerpoHtml(inspeccion, adjuntoExcel != null, adjuntosFotos.size)
+            val cuerpoAdmin = buildCuerpoHtml(inspeccion, adjuntoExcel != null, fotosParaAdmin, totalFotosGuardadas)
 
-            Log.d("NuevaInspVM", "Enviando email ADMIN a: ${emailSettings.emailAdmin}, CC: $ccAdmin, adjuntos: ${adjuntosAdmin.size}")
+            Log.d("NuevaInspVM", "Enviando email ADMIN a: ${emailSettings.emailAdmin}, adjuntos: ${adjuntosAdmin.size} (fotos adjuntas=$fotosParaAdmin, fotos en dispositivo=$totalFotosGuardadas)")
             val resultadoAdmin = emailService.enviarConAdjuntos(
                 destinatarios = listOf(emailSettings.emailAdmin),
                 cc = ccAdmin,
@@ -458,9 +469,7 @@ class NuevaInspeccionViewModel @Inject constructor(
         val enviarExcelAlInspector = emailSettings.enviarPresupuestoAlInspector
         val enviarImagenesAlInspector = emailSettings.enviarImagenesAlInspector
 
-        // Solo enviar si al menos una regla está activa y el email es válido
         if ((enviarPdfAlInspector || enviarExcelAlInspector || enviarImagenesAlInspector) && emailInspector.esEmailValido()) {
-            // No enviar al inspector si es el mismo que el admin (ya lo recibió)
             if (!emailInspector.equals(emailSettings.emailAdmin, ignoreCase = true)) {
                 val adjuntosInspector = mutableListOf<EmailService.Adjunto>()
                 if (enviarPdfAlInspector) adjuntosInspector.add(adjuntoPdf)
@@ -470,9 +479,9 @@ class NuevaInspeccionViewModel @Inject constructor(
                 if (adjuntosInspector.isNotEmpty()) {
                     val tieneExcel = enviarExcelAlInspector && adjuntoExcel != null
                     val numFotosInspector = if (enviarImagenesAlInspector) adjuntosFotos.size else 0
-                    val cuerpoInspector = buildCuerpoHtml(inspeccion, tieneExcel, numFotosInspector)
+                    val cuerpoInspector = buildCuerpoHtml(inspeccion, tieneExcel, numFotosInspector, totalFotosGuardadas)
 
-                    Log.d("NuevaInspVM", "Enviando email INSPECTOR a: $emailInspector, adjuntos: ${adjuntosInspector.size} (PDF=$enviarPdfAlInspector, Excel=$enviarExcelAlInspector, Fotos=$enviarImagenesAlInspector)")
+                    Log.d("NuevaInspVM", "Enviando email INSPECTOR a: $emailInspector, adjuntos: ${adjuntosInspector.size}")
                     val resultadoInspector = emailService.enviarConAdjuntos(
                         destinatarios = listOf(emailInspector),
                         cc = null,
@@ -494,10 +503,92 @@ class NuevaInspeccionViewModel @Inject constructor(
                 Log.d("NuevaInspVM", "Inspector y admin son el mismo email, no se envía duplicado.")
             }
         } else {
-            Log.d("NuevaInspVM", "No se envía email al inspector (reglas: PDF=$enviarPdfAlInspector, Excel=$enviarExcelAlInspector, Fotos=$enviarImagenesAlInspector, email válido=${emailInspector.esEmailValido()})")
+            Log.d("NuevaInspVM", "No se envía email al inspector.")
         }
 
-        _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Proceso de envío de emails completado."))
+        _uiEvents.send(NuevaInspeccionUiEvent.ShowSnackbar("Proceso completado. Fotos guardadas en Descargas/Ferji_Inspecciones/$siniestroLimpio/"))
+    }
+
+    /**
+     * Guarda todas las fotos de las habitaciones en:
+     * Descargas/Ferji_Inspecciones/{siniestro}/{habitacion}_1.jpg, etc.
+     *
+     * Usa MediaStore para Android 10+ y File API para versiones anteriores.
+     *
+     * @return Número de fotos guardadas exitosamente
+     */
+    private fun guardarFotosLocalmente(habitaciones: List<HabitacionEntity>, siniestroLimpio: String): Int {
+        var fotosGuardadas = 0
+        val subcarpeta = "Ferji_Inspecciones/$siniestroLimpio"
+
+        for (habitacion in habitaciones) {
+            val fotos = habitacion.getFotosList()
+            Log.d("NuevaInspVM", "Habitación '${habitacion.nombre}': ${fotos.size} fotos, paths=$fotos")
+
+            val habNombre = habitacion.nombre
+                .replace("[^a-zA-ZáéíóúñÁÉÍÓÚÑ0-9 ]".toRegex(), "")
+                .trim()
+                .replace("\\s+".toRegex(), "_")
+                .ifBlank { "Sin_nombre" }
+
+            fotos.forEachIndexed { index, fotoPath ->
+                if (fotoPath.isNotBlank()) {
+                    val archivoOrigen = java.io.File(fotoPath)
+                    Log.d("NuevaInspVM", "  Foto[$index]: path='$fotoPath', exists=${archivoOrigen.exists()}, size=${if (archivoOrigen.exists()) archivoOrigen.length() else 0}")
+
+                    if (archivoOrigen.exists() && archivoOrigen.length() > 0) {
+                        try {
+                            val extension = archivoOrigen.extension.ifBlank { "jpg" }
+                            val nombreDestino = "${habNombre}_${index + 1}.$extension"
+
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                                // Android 10+: usar MediaStore
+                                val contentValues = android.content.ContentValues().apply {
+                                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, nombreDestino)
+                                    put(android.provider.MediaStore.Downloads.MIME_TYPE, "image/$extension")
+                                    put(android.provider.MediaStore.Downloads.RELATIVE_PATH, "Download/$subcarpeta")
+                                }
+                                val resolver = applicationContext.contentResolver
+                                val uri = resolver.insert(
+                                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                                    contentValues
+                                )
+                                if (uri != null) {
+                                    resolver.openOutputStream(uri)?.use { outputStream ->
+                                        archivoOrigen.inputStream().use { inputStream ->
+                                            inputStream.copyTo(outputStream)
+                                        }
+                                    }
+                                    fotosGuardadas++
+                                    Log.d("NuevaInspVM", "  ✅ Foto guardada (MediaStore): $nombreDestino → $uri")
+                                } else {
+                                    Log.e("NuevaInspVM", "  ❌ MediaStore insert retornó null para $nombreDestino")
+                                }
+                            } else {
+                                // Android 9 y anterior: copiar directamente
+                                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+                                    android.os.Environment.DIRECTORY_DOWNLOADS
+                                )
+                                val carpetaFerji = java.io.File(downloadsDir, subcarpeta)
+                                if (!carpetaFerji.exists()) carpetaFerji.mkdirs()
+
+                                val archivoDestino = java.io.File(carpetaFerji, nombreDestino)
+                                archivoOrigen.copyTo(archivoDestino, overwrite = true)
+                                fotosGuardadas++
+                                Log.d("NuevaInspVM", "  ✅ Foto guardada (File): ${archivoDestino.absolutePath}")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("NuevaInspVM", "  ❌ Error copiando foto '$fotoPath': ${e.message}", e)
+                        }
+                    } else {
+                        Log.w("NuevaInspVM", "  ⚠️ Foto no encontrada o vacía: $fotoPath")
+                    }
+                }
+            }
+        }
+
+        Log.i("NuevaInspVM", "═══ $fotosGuardadas fotos guardadas en Download/$subcarpeta ═══")
+        return fotosGuardadas
     }
 
     /**
@@ -524,9 +615,19 @@ class NuevaInspeccionViewModel @Inject constructor(
     /**
      * Genera el cuerpo HTML del email.
      */
-    private fun buildCuerpoHtml(inspeccion: InspeccionEntity, incluirExcel: Boolean, numFotos: Int = 0): String {
-        val adjuntosTexto = if (incluirExcel || numFotos > 0) {
+    private fun buildCuerpoHtml(inspeccion: InspeccionEntity, incluirExcel: Boolean, numFotos: Int = 0, fotosEnDispositivo: Int = 0): String {
+        val adjuntosTexto = if (incluirExcel) {
             " y el presupuesto de reparación"
+        } else ""
+
+        val notaFotos = if (fotosEnDispositivo > 0 && numFotos == 0) {
+            """
+            <p style="color: #666; font-size: 12px; border-left: 3px solid #61CE70; padding-left: 10px;">
+                📸 <strong>$fotosEnDispositivo fotografías</strong> fueron tomadas durante la inspección
+                y se encuentran guardadas en el dispositivo del inspector
+                (carpeta: <em>Descargas/Ferji_Inspecciones/${inspeccion.siniestro}</em>).
+            </p>
+            """.trimIndent()
         } else ""
 
         return """
@@ -546,6 +647,7 @@ class NuevaInspeccionViewModel @Inject constructor(
                 ${if (incluirExcel) "<li>Presupuesto de Reparación (Excel)</li>" else ""}
                 ${if (numFotos > 0) "<li>Fotografías de la inspección ($numFotos imágenes)</li>" else ""}
             </ul>
+            $notaFotos
             <p>Si tiene alguna consulta, no dude en contactarnos.</p>
             <p>Saludos cordiales,<br/><strong>Equipo Ferji Inspecciones</strong></p>
             </body></html>

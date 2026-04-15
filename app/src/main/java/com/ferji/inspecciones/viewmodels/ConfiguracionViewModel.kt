@@ -30,6 +30,7 @@ class ConfiguracionViewModel @Inject constructor(
         val enviarInspeccionAlInspector: Boolean = false,
         val enviarPresupuestoAlInspector: Boolean = false,
         val enviarImagenesAlInspector: Boolean = false,
+        val enviarImagenesAlAdmin: Boolean = false,
         val isLoading: Boolean = true,
         val isSaving: Boolean = false
     )
@@ -59,6 +60,7 @@ class ConfiguracionViewModel @Inject constructor(
                     enviarInspeccionAlInspector = settings.enviarInspeccionAlInspector,
                     enviarPresupuestoAlInspector = settings.enviarPresupuestoAlInspector,
                     enviarImagenesAlInspector = settings.enviarImagenesAlInspector,
+                    enviarImagenesAlAdmin = settings.enviarImagenesAlAdmin,
                     isLoading = false
                 )
             }
@@ -86,6 +88,10 @@ class ConfiguracionViewModel @Inject constructor(
         _uiState.update { it.copy(enviarImagenesAlInspector = value) }
     }
 
+    fun onEnviarImagenesAlAdminChange(value: Boolean) {
+        _uiState.update { it.copy(enviarImagenesAlAdmin = value) }
+    }
+
     fun guardarConfiguracion() {
         viewModelScope.launch {
             val state = _uiState.value
@@ -101,7 +107,8 @@ class ConfiguracionViewModel @Inject constructor(
                 emailCc = state.emailCc.trim(),
                 enviarInspeccionAlInspector = state.enviarInspeccionAlInspector,
                 enviarPresupuestoAlInspector = state.enviarPresupuestoAlInspector,
-                enviarImagenesAlInspector = state.enviarImagenesAlInspector
+                enviarImagenesAlInspector = state.enviarImagenesAlInspector,
+                enviarImagenesAlAdmin = state.enviarImagenesAlAdmin
             )
 
             val exito = emailSettingsRepository.actualizarConfiguracion(settings)
