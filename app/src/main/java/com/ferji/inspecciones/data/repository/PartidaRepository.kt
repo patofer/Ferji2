@@ -53,11 +53,20 @@ class PartidaRepository @Inject constructor(
                     val localPrincipal = partidaPrincipalDao.getByFirebaseId(firebasePrincipal.firebaseId)
                     Log.d("SYNC_DOWNLOAD", "  Existe local con firebaseId='${firebasePrincipal.firebaseId}'? ${localPrincipal != null} (localId=${localPrincipal?.id})")
 
-                    val idPadreLocal = partidaPrincipalDao.upsert(
+                    val upsertResult = partidaPrincipalDao.upsert(
                         if (localPrincipal != null) firebasePrincipal.copy(id = localPrincipal.id) else firebasePrincipal
                     )
-                    Log.d("SYNC_DOWNLOAD", "  Guardado/Actualizado con ID local: $idPadreLocal")
-                    if (idPadreLocal == -1L) continue
+                    // Room @Upsert devuelve -1 cuando la operación resultó en UPDATE (no INSERT).
+                    // En ese caso usamos el id local existente para seguir procesando las hijas.
+                    val idPadreLocal: Long = when {
+                        upsertResult > 0L -> upsertResult
+                        localPrincipal != null -> localPrincipal.id
+                        else -> {
+                            Log.w("SYNC_DOWNLOAD", "  ⚠️ upsert devolvió $upsertResult y no hay registro local previo. Se salta.")
+                            continue
+                        }
+                    }
+                    Log.d("SYNC_DOWNLOAD", "  Guardado/Actualizado (upsertResult=$upsertResult) → idPadreLocal=$idPadreLocal")
 
                     val snapshotDetalle = remoteDataSource.getPartidasHijas(docPrincipal)
                     Log.d("SYNC_DOWNLOAD", "  Partidas hijas encontradas: ${snapshotDetalle.documents.size}")
@@ -71,6 +80,9 @@ class PartidaRepository @Inject constructor(
                         partidaDao.upsert(detalleParaGuardar)
                     }
                 }
+                // NOTA: La limpieza automática de "huérfanos" (partidas locales que ya no están en Firebase)
+                // fue removida intencionalmente para evitar borrados accidentales durante la sincronización.
+                // La eliminación de partidas solo debe hacerse explícitamente por el usuario desde el mantenedor.
             }
 
             // Verificar lo que quedó en la BD local
@@ -141,15 +153,27 @@ class PartidaRepository @Inject constructor(
                     continue
                 }
 
-                val firebaseIdGenerado = remoteDataSource.subirPartidaHija(padreLocal.firebaseId, partidaHijaLocal)
-                val partidaHijaActualizada = partidaHijaLocal.copy(
-                    firebaseId = firebaseIdGenerado,
-                    sincronizadoConFirebase = true
-                )
-                partidaDao.upsert(partidaHijaActualizada)
-                Log.d("SYNC_UPLOAD_HIJOS", "Partida hija ${partidaHijaLocal.id} subida a padre ${padreLocal.firebaseId}. Firebase ID: $firebaseIdGenerado")
+                // Si ya tiene un firebaseId REAL (no temporal "local_..."), es una EDICIÓN → UPDATE.
+                // Si no, es una partida NUEVA → CREATE.
+                val firebaseIdActual = partidaHijaLocal.firebaseId
+                val esNueva = firebaseIdActual.isBlank() || firebaseIdActual.startsWith("local_")
+
+                if (esNueva) {
+                    val firebaseIdGenerado = remoteDataSource.subirPartidaHija(padreLocal.firebaseId, partidaHijaLocal)
+                    val partidaHijaActualizada = partidaHijaLocal.copy(
+                        firebaseId = firebaseIdGenerado,
+                        sincronizadoConFirebase = true
+                    )
+                    partidaDao.upsert(partidaHijaActualizada)
+                    Log.d("SYNC_UPLOAD_HIJOS", "Partida hija ${partidaHijaLocal.id} CREADA en Firebase bajo padre ${padreLocal.firebaseId}. FirebaseId: $firebaseIdGenerado")
+                } else {
+                    remoteDataSource.actualizarPartidaHija(padreLocal.firebaseId, firebaseIdActual, partidaHijaLocal)
+                    val partidaHijaActualizada = partidaHijaLocal.copy(sincronizadoConFirebase = true)
+                    partidaDao.upsert(partidaHijaActualizada)
+                    Log.d("SYNC_UPLOAD_HIJOS", "Partida hija ${partidaHijaLocal.id} ACTUALIZADA en Firebase ($firebaseIdActual).")
+                }
             } catch (e: Exception) {
-                Log.e("SYNC_UPLOAD_HIJOS", "Error al subir partida hija local id: ${partidaHijaLocal.id}", e)
+                Log.e("SYNC_UPLOAD_HIJOS", "Error al subir/actualizar partida hija local id: ${partidaHijaLocal.id}", e)
             }
         }
     }

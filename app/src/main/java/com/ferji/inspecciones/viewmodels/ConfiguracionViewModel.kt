@@ -31,8 +31,8 @@ class ConfiguracionViewModel @Inject constructor(
         val enviarPresupuestoAlInspector: Boolean = false,
         val enviarImagenesAlInspector: Boolean = false,
         val enviarImagenesAlAdmin: Boolean = false,
-        val isLoading: Boolean = true,
-        val isSaving: Boolean = false
+        val isSaving: Boolean = false,
+        val isLoading: Boolean = true
     )
 
     sealed class ConfiguracionEvent {

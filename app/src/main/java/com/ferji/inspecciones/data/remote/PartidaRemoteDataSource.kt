@@ -49,6 +49,24 @@ class PartidaRemoteDataSource @Inject constructor(
         return documentReference.id
     }
 
+    /**
+     * Actualiza una PartidaEntity existente en la subcolección de su padre usando su firebaseId.
+     */
+    suspend fun actualizarPartidaHija(idPadreFirebase: String, firebaseIdHija: String, partidaHija: PartidaEntity) {
+        val datos = mapOf(
+            "descripcion" to partidaHija.descripcion,
+            "unidad" to partidaHija.unidad,
+            "precio_unitario" to partidaHija.precioUnitario,
+            "codigo" to partidaHija.codigo
+        )
+        partidaPrincipalCollection
+            .document(idPadreFirebase)
+            .collection("partidas")
+            .document(firebaseIdHija)
+            .update(datos)
+            .await()
+    }
+
     suspend fun getCatalogoPartidasPrincipales(): QuerySnapshot {
         return partidaPrincipalCollection.get().await()
     }

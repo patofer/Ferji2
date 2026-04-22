@@ -105,9 +105,8 @@ class PartidaViewModel @Inject constructor(
             repository.upsertPartida(partida)
             Log.d("PartidaVM", "Partida guardada localmente: $partida")
 
-            if (esNuevo) {
-                programarTrabajoDeSubida()
-            }
+            // Programar subida tanto si es nueva (crear en Firebase) como si es edición (actualizar en Firebase).
+            programarTrabajoDeSubida()
         }
     }
 

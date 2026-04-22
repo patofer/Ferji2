@@ -22,10 +22,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Rule
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Email
-import androidx.compose.material.icons.outlined.Rule
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -210,7 +210,7 @@ fun PantallaConfiguracion(
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                             icon = {
                                 Icon(
-                                    Icons.Outlined.Rule,
+                                    Icons.AutoMirrored.Outlined.Rule,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSecondaryContainer

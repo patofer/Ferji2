@@ -27,8 +27,8 @@ interface PartidaPrincipalDao {
     @Query("SELECT * FROM partidas_principales WHERE id = :id")
     fun getPartidaPrincipalWithDetails(id: Long): Flow<PartidaPrincipalWithDetails?>
 
-    @Query("DELETE FROM partidas_principales")
-    suspend fun deleteAll()
+    // NOTA: se eliminó deleteAll() a propósito para evitar borrados masivos accidentales.
+    // La eliminación de partidas principales solo debe hacerse explícitamente por el usuario desde el mantenedor.
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(partidas: List<PartidaPrincipalEntity>)
@@ -38,6 +38,13 @@ interface PartidaPrincipalDao {
 
     @Query("SELECT * FROM partidas_principales WHERE sincronizadoConFirebase = 0")
     suspend fun getNoSincronizadas(): List<PartidaPrincipalEntity>
+
+    /**
+     * Devuelve las partidas principales que ya fueron subidas a Firebase alguna vez
+     * (excluye las locales con firebaseId vacío o temporal "local_...").
+     */
+    @Query("SELECT * FROM partidas_principales WHERE firebaseId != '' AND firebaseId NOT LIKE 'local\\_%' ESCAPE '\\'")
+    suspend fun getAllSincronizadas(): List<PartidaPrincipalEntity>
 
     @Query("SELECT * FROM partidas_principales WHERE id = :id")
     suspend fun getById(id: Long): PartidaPrincipalEntity?

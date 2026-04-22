@@ -51,8 +51,8 @@ interface PartidaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(partidas: List<PartidaEntity>) // <-- AÑADIR
 
-    @Query("DELETE FROM partidas")
-    suspend fun deleteAll() // <-- AÑADIR
+    // NOTA: se eliminó deleteAll() a propósito para evitar borrados masivos accidentales.
+    // La eliminación de partidas solo debe hacerse explícitamente por el usuario desde el mantenedor.
 
 
     @Query("SELECT * FROM partidas WHERE firebaseId = :firebaseId LIMIT 1")
@@ -63,6 +63,14 @@ interface PartidaDao {
 
     @Query("SELECT * FROM partidas WHERE sincronizadoConFirebase = 0")
     suspend fun getNoSincronizadas(): List<PartidaEntity>
+
+    /**
+     * Devuelve las partidas hijas que ya fueron subidas a Firebase alguna vez
+     * (excluye las locales con firebaseId vacío o temporal "local_...").
+     * Se usa para detectar y eliminar huérfanos que ya no existen en Firebase.
+     */
+    @Query("SELECT * FROM partidas WHERE firebaseId != '' AND firebaseId NOT LIKE 'local\\_%' ESCAPE '\\' AND eliminado = 0")
+    suspend fun getAllSincronizadasConFirebaseId(): List<PartidaEntity>
 
 
     @Query("SELECT * FROM partidas WHERE partida_principal_id = :idPadre")

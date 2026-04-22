@@ -25,8 +25,8 @@ android {
         applicationId = "com.ferji.inspecciones"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "2.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
 
@@ -90,6 +90,16 @@ android {
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/LICENSE"
         }
+    }
+
+    // Renombrar el APK generado
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                output.outputFileName = "ferji${variant.versionName}.apk"
+            }
     }
 }
 
