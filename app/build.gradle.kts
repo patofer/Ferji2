@@ -27,6 +27,16 @@ android {
         targetSdk = 35
         versionCode = 3
         versionName = "2.0.1"
+
+    // Renombrar el APK generado
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                output.outputFileName = "ferji${variant.versionName}.apk"
+            }
+    }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
 
@@ -90,16 +100,6 @@ android {
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/LICENSE"
         }
-    }
-
-    // Renombrar el APK generado
-    applicationVariants.all {
-        val variant = this
-        variant.outputs
-            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
-            .forEach { output ->
-                output.outputFileName = "ferji${variant.versionName}.apk"
-            }
     }
 }
 
